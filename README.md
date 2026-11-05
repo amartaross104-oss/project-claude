@@ -60,6 +60,11 @@ market (BTC x9, ETH x13 buy&hold), roughly flat over the last 2 years; crypto sh
 No single pair reaches t >= 1.64 on its own, so the per-symbol, per-direction health gate (>= 30 trades, PF >= 1.2,
 expectancy > 0, t >= 1.64, positive last 2 years) blocks every signal by default. `--paper` still emits breakout signals,
 clearly labelled PAPER / UNVALIDATED, so the idea can be forward-tested without risking money.
+```bash
+python -m signalbot trend BTCUSDT ETHUSDT --system 2 --paper --notify --loop   # checks after each daily close (00:00 UTC)
+python -m signalbot trend BTCUSDT ETHUSDT --system 2 --paper --dry-run          # preview only
+```
+Each breakout bar is sent at most once. Use crypto only for paper trading; forex has no edge here.
 
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).

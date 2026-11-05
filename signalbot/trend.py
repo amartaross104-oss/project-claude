@@ -24,6 +24,8 @@ class TrendParams:
     stop_mult: float = 2.0
 
 
+TRADE_COLUMNS = ["time", "exit_time", "side", "entry", "exit", "r", "stop_frac", "bars", "open",
+                 "exit_pending"]
 SYSTEM_1 = TrendParams(20, 10)   # classic "Turtle" system 1
 SYSTEM_2 = TrendParams(55, 20)   # classic "Turtle" system 2
 
@@ -84,7 +86,7 @@ def run_trend(df: pd.DataFrame, p: TrendParams, cost_bps: float) -> pd.DataFrame
                          exit=exit_px, r=r, stop_frac=stop_frac, bars=x_idx - e_idx + 1,
                          open=is_open, exit_pending=exit_pending))
         t = max(x_idx, t + 1)                          # next signal can only come after the exit
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=TRADE_COLUMNS)
 
 
 def position_open(trades: pd.DataFrame) -> bool:

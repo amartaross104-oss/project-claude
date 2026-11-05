@@ -82,3 +82,30 @@ def test_message_labels_paper_mode():
     assert "\\n" not in m and "gate FAILED" in m
     ok_msg = build_message("BTCUSDT", P, df, 1, st, ok=True, paper=False)
     assert not ok_msg.startswith("PAPER") and "gate PASSED" in ok_msg
+
+
+def test_trend_notify_dedupes_same_bar(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from signalbot import trend_cli
+
+    df = ramp_then_crash().iloc[:61]                      # last bar = first breakout
+    monkeypatch.setattr(trend_cli.data, "load", lambda *a, **k: df)
+    sent = []
+    a = SimpleNamespace(symbols=["BTCUSDT"], system="1", paper=True, notify=True, dry_run=False, loop=False)
+    monkeypatch.setattr(trend_cli, "fresh_signal", lambda *x, **k: 1)
+    state = tmp_path / "s.json"
+    assert trend_cli.check_trend(a, state, sent.append) is True
+    assert trend_cli.check_trend(a, state, sent.append) is False   # same bar -> no duplicate
+    assert len(sent) == 1 and sent[0].startswith("PAPER / UNVALIDATED")
+    a.dry_run = True
+    assert trend_cli.check_trend(a, state, sent.append) is False and len(sent) == 1
+
+
+def test_empty_history_does_not_crash():
+    df = ramp_then_crash().iloc[:61]
+    t = run_trend(df.iloc[:30], P, 0.0)                  # too short for any trade
+    assert t.empty and "side" in t.columns
+    ok, why, st = gate_direction(t, 1)
+    assert not ok and st == {}
+    m = build_message("BTCUSDT", P, df, 1, st, ok=False, paper=True)
+    assert "no completed long trades" in m and m.startswith("PAPER / UNVALIDATED")
