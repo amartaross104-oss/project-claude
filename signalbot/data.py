@@ -45,6 +45,8 @@ def fetch_binance(symbol: str, interval: str = "1h", years: float | None = None,
 
 
 def fetch_yahoo(symbol: str, interval: str = "1h", range_: str | None = None) -> pd.DataFrame:
+    if interval == "15m":
+        raise ValueError("Forex 15m is not supported: Yahoo only keeps ~60 days of intraday data")
     if interval not in ("1h", "1d"):  # Yahoo has no 4h bars: build them from 1h
         return resample(fetch_yahoo(symbol, "1h", range_), interval)
     # Yahoo limits 1h data to the last ~730 days; daily data goes back 10+ years.
