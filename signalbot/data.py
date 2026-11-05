@@ -11,15 +11,16 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 BINANCE_URL = "https://data-api.binance.vision/api/v3/klines"
 YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 HEADERS = {"User-Agent": "Mozilla/5.0"}
-INTERVAL_MS = {"1h": 3_600_000, "4h": 14_400_000, "15m": 900_000}
+INTERVAL_MS = {"1h": 3_600_000, "4h": 14_400_000, "15m": 900_000, "1d": 86_400_000}
 
 
 def is_crypto(symbol: str) -> bool:
     return symbol.upper().endswith(("USDT", "USDC", "BUSD"))
 
 
-def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0,
+def fetch_binance(symbol: str, interval: str = "1h", years: float | None = None,
                   start_ms: int | None = None) -> pd.DataFrame:
+    years = years if years is not None else (7.0 if interval == "1d" else 3.0)
     start = start_ms if start_ms is not None else int((time.time() - years * 365 * 86400) * 1000)
     rows: list[list] = []
     while True:
@@ -43,10 +44,11 @@ def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0,
     return df.set_index("time").astype(float)
 
 
-def fetch_yahoo(symbol: str, interval: str = "1h", range_: str = "730d") -> pd.DataFrame:
-    if interval != "1h":  # Yahoo has no 4h bars: build them from 1h
+def fetch_yahoo(symbol: str, interval: str = "1h", range_: str | None = None) -> pd.DataFrame:
+    if interval not in ("1h", "1d"):  # Yahoo has no 4h bars: build them from 1h
         return resample(fetch_yahoo(symbol, "1h", range_), interval)
-    # Yahoo limits 1h data to the last ~730 days.
+    # Yahoo limits 1h data to the last ~730 days; daily data goes back 10+ years.
+    range_ = range_ or ("10y" if interval == "1d" else "730d")
     r = requests.get(
         YAHOO_URL.format(ticker=f"{symbol}=X"),
         params={"interval": interval, "range": range_},
@@ -65,7 +67,7 @@ def fetch_yahoo(symbol: str, interval: str = "1h", range_: str = "730d") -> pd.D
 
 
 def resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
-    rule = {"15m": "15min", "1h": "1h", "4h": "4h"}[interval]
+    rule = {"15m": "15min", "1h": "1h", "4h": "4h", "1d": "1D"}[interval]
     out = df.resample(rule).agg(
         {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     )
@@ -108,7 +110,9 @@ def update(symbol: str, interval: str = "1h") -> pd.DataFrame:
         if is_crypto(symbol):
             new = fetch_binance(symbol, interval, start_ms=int(old.index[-1].timestamp() * 1000))
         elif age <= pd.Timedelta(days=5):
-            new = fetch_yahoo(symbol, interval, "10d").iloc[2:]  # first buckets may be partial
+            daily = interval == "1d"
+            new = fetch_yahoo(symbol, interval, "1mo" if daily else "10d")
+            new = new if daily else new.iloc[2:]  # resampled first buckets may be partial
         else:
             return fetch(symbol, interval)
     except requests.RequestException:

@@ -60,7 +60,7 @@ def evaluate(df: pd.DataFrame, atr_s: pd.Series, cfg: Config, sop: SOP) -> dict:
         stop_frac = cfg.tp_mult * atr_s / c
         ok = ((cfg.cost_bps / 1e4) / stop_frac <= sop.max_cost_r).to_numpy()
         rules["cost"] = (ok, ok)
-    if sop.session and not is_crypto(cfg.symbol):
+    if sop.session and not is_crypto(cfg.symbol) and cfg.interval != "1d":
         entry_hour = (df.index + pd.Timedelta(milliseconds=INTERVAL_MS[cfg.interval])).hour
         ok = np.asarray((entry_hour >= sop.session_start) & (entry_hour < sop.session_end))
         rules["session"] = (ok, ok)

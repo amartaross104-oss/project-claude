@@ -25,8 +25,8 @@ A model signal is only sent if it passes **both** layers:
    volatility within the 20–90th percentile of the last 500 bars, round-trip cost <= 0.15 R, and for forex an
    08:00–17:00 UTC entry session. The message shows each rule as OK/X.
 2. **Strategy health gate** (`signalbot/health.py`): a fresh walk-forward backtest (after costs) must show
-   >= 50 OOS trades, profit factor >= 1.2, positive expectancy, an edge over random sides, and positive
-   expectancy over the last 180 days.
+   >= 50 OOS trades, profit factor >= 1.2, positive expectancy, statistical significance (t >= 1.64), an edge over
+   random sides, and positive expectancy recently (180 days; 365 for daily).
 `python -m signalbot health EURUSD --interval 4h` shows the verdict; `--no-sop` / `--no-health-gate` disable a layer
 (not recommended). **Current verdict: all four tested pairs (BTC, ETH, EURUSD, GBPUSD on 4h) FAIL the gate
 (PF 0.70–0.79), so the bot sends nothing.** That is intended: no demonstrated edge, no signal.
@@ -44,6 +44,13 @@ python -m signalbot watch BTCUSDT --interval 4h --dry-run --once    # preview wi
 ```
 Keep it running 24/7 on a VPS / always-on machine (e.g. `tmux`, `systemd`, or Docker), or use `--once` from cron
 (`5 */4 * * *`). Secrets stay in environment variables; never commit them. `data/` (cache + dedupe state) is git-ignored.
+
+## Daily timeframe + funding rate (tested)
+`--interval 1d` (crypto since 2019, forex since 2016) and `--funding` (Binance perpetual funding-rate features from
+the public archive, crypto only). On 1d costs are only ~0.03-0.05 R, so results sit near break-even, but no variant
+shows a statistically significant edge. Best-looking variant: ETHUSDT 1d + funding + SOP, 57 trades, PF 1.27,
++0.10 R/trade, but t = 0.83, 95% CI [-0.13, +0.32] R and -0.11 R over the last year: consistent with luck after trying
+many variants. The health gate therefore also requires t >= 1.64 (one-sided 95%) and blocks all four pairs.
 
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).

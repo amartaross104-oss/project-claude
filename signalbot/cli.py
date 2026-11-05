@@ -20,7 +20,7 @@ from .pipeline import build
 
 def _cfg(a, symbol: str | None = None) -> Config:
     return Config(symbol=(symbol or a.symbol).upper(), interval=a.interval, thr=a.thr, margin=a.margin, tp_mult=a.tp_mult,
-                  horizon=a.horizon, cost_bps=a.cost_bps)
+                  horizon=a.horizon, cost_bps=a.cost_bps, use_funding=getattr(a, "funding", False))
 
 
 def cmd_fetch(a):
@@ -131,6 +131,7 @@ def main(argv=None):
         sp.add_argument("--horizon", type=int, default=None,
                         help="max bars per trade (default per interval)")
         sp.add_argument("--cost-bps", type=float, default=None, help="round-trip cost in bps")
+        sp.add_argument("--funding", action="store_true", help="crypto: add funding-rate features")
 
     def gates(sp):
         sp.add_argument("--no-sop", action="store_true", help="disable the SOP rule checklist")

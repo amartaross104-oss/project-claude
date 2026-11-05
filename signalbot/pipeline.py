@@ -25,4 +25,9 @@ def build(cfg: Config, refresh: bool = False) -> Dataset:
     df = data.load(cfg.symbol, cfg.interval, refresh=refresh)
     a = atr(df)
     b = barrier_outcomes(df, a, cfg.tp_mult, cfg.horizon)
-    return Dataset(df, make_features(df), a, b, to_class(b.outcome))
+    extra = None
+    if cfg.use_funding and data.is_crypto(cfg.symbol):
+        from .derivs import funding_features
+
+        extra = funding_features(cfg.symbol, df.index, cfg.interval)
+    return Dataset(df, make_features(df, extra), a, b, to_class(b.outcome))

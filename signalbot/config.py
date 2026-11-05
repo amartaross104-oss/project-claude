@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 
 
-BARS_PER_DAY = {"15m": 96, "1h": 24, "4h": 6}
-HORIZON_DEFAULT = {"15m": 48, "1h": 24, "4h": 12}
+BARS_PER_DAY = {"15m": 96, "1h": 24, "4h": 6, "1d": 1}
+HORIZON_DEFAULT = {"15m": 48, "1h": 24, "4h": 12, "1d": 10}
+MIN_TRAIN_DEFAULT = {"15m": 96 * 180, "1h": 24 * 180, "4h": 6 * 180, "1d": 730}
 
 
 @dataclass
@@ -20,6 +21,7 @@ class Config:
     # Walk-forward.
     min_train_bars: int | None = None  # None -> 180 days of bars
     step_bars: int | None = None       # None -> 30 days of bars
+    use_funding: bool = False          # crypto only: add perpetual funding-rate features
     seed: int = 42
 
     def __post_init__(self):
@@ -27,7 +29,7 @@ class Config:
         if self.horizon is None:
             self.horizon = HORIZON_DEFAULT[self.interval]
         if self.min_train_bars is None:
-            self.min_train_bars = 180 * bpd
+            self.min_train_bars = MIN_TRAIN_DEFAULT[self.interval]
         if self.step_bars is None:
             self.step_bars = 30 * bpd
 

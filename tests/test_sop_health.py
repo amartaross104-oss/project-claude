@@ -118,3 +118,43 @@ def test_incremental_update_only_fetches_new_bars(tmp_path, monkeypatch):
     assert seen["start"] == int(idx[-1].timestamp() * 1000)   # asked only from the last cached bar
     assert len(df) == 12 and df.index.is_monotonic_increasing and not df.index.duplicated().any()
     assert df["close"].iloc[-1] == 9.0 and df["close"].iloc[0] == 1.5  # old kept, new overrides tail
+
+
+def test_funding_cache_roundtrip_with_mixed_timestamps(tmp_path, monkeypatch):
+    from signalbot import derivs
+    monkeypatch.setattr(derivs, "DATA_DIR", tmp_path)
+    path = derivs._month_file("BTCUSDT", "2024-01")
+    path.parent.mkdir(parents=True)
+    path.write_text("time,rate\n2024-01-02 00:00:00.002000+00:00,0.0001\n"
+                    "2024-01-02 08:00:00+00:00,0.0002\n2024-01-02 16:00:00.005000+00:00,0.0003\n")
+    monkeypatch.setattr(derivs, "_download_month", lambda *a: None)
+    df = derivs.load_funding("BTCUSDT", pd.Timestamp("2024-01-01", tz="UTC"))
+    assert len(df) == 3 and df["time"].is_monotonic_increasing
+
+
+def test_funding_features_use_only_past_funding(monkeypatch):
+    from signalbot import derivs
+    idx = pd.date_range("2024-01-02", periods=3, freq="D", tz="UTC")
+    times = pd.to_datetime(["2024-01-02 00:00:00.003", "2024-01-02 08:00", "2024-01-02 16:00",
+                            "2024-01-03 00:00:00.004", "2024-01-03 08:00", "2024-01-03 16:00"],
+                           utc=True, format="ISO8601")
+    fr = pd.DataFrame({"time": times, "rate": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]})
+    monkeypatch.setattr(derivs, "load_funding", lambda *a, **k: fr)
+    f = derivs.funding_features("BTCUSDT", idx, "1d")
+    # day 2024-01-02 closes 2024-01-03 00:00:00 -> last allowed funding is the 16:00 one (0.3);
+    # the 00:00:00.004 settlement (0.4) is after the close and must NOT leak in.
+    assert np.isclose(f["fund_last"].iloc[0], 0.3)
+    assert np.isclose(f["fund_last"].iloc[1], 0.6)
+
+
+def test_t_stat_and_significance_gate():
+    from signalbot.health import criteria_for, t_stat
+    assert np.isclose(t_stat([1.0, 1.0, 1.0, 2.0]), 1.25 / (0.5 / 2))
+    assert np.isnan(t_stat([1.0]))
+    assert abs(t_stat(np.random.default_rng(0).normal(0, 1, 5000))) < 3
+    assert criteria_for("1d").recent_days == 365 and criteria_for("4h").recent_days == 180
+
+
+def test_t_stat_zero_variance():
+    from signalbot.health import t_stat
+    assert t_stat([1.0, 1.0, 1.0]) == float("inf") and t_stat([-1.0, -1.0]) == float("-inf")

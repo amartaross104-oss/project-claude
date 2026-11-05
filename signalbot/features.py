@@ -20,7 +20,7 @@ def rsi(close: pd.Series, n: int = 14) -> pd.Series:
     return 100 - 100 / (1 + up / dn.replace(0, np.nan))
 
 
-def make_features(df: pd.DataFrame) -> pd.DataFrame:
+def make_features(df: pd.DataFrame, extra: pd.DataFrame | None = None) -> pd.DataFrame:
     c, o, h, l = df["close"], df["open"], df["high"], df["low"]
     a = atr(df)
     ret1 = c.pct_change()
@@ -56,4 +56,6 @@ def make_features(df: pd.DataFrame) -> pd.DataFrame:
         v = df["volume"]
         f["vol_z"] = (v - v.rolling(48).mean()) / v.rolling(48).std()
 
+    if extra is not None:
+        f = f.join(extra)
     return f.replace([np.inf, -np.inf], np.nan)
