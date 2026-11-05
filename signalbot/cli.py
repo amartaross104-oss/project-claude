@@ -10,6 +10,7 @@ from .backtest import random_baseline, run_backtest
 from .config import Config
 from .model import fit_final, predict_last, walk_forward
 from .notify import find_chat_ids, send_telegram
+from .features import atr
 from .health import assess
 from .model import walk_forward as _wf  # noqa: F401
 from .signals import Signal, check_once, compute_signal, watch
@@ -96,8 +97,8 @@ def demo_text(cfg: Config, df, atr_s, side: int) -> str:
 
 def cmd_demo(a):
     cfg = _cfg(a)
-    ds = build(cfg, refresh=True)
-    text = demo_text(cfg, ds.df, ds.atr, 1 if a.side == "long" else -1)
+    df = data.load(cfg.symbol, cfg.interval, refresh=True)  # incremental: only new bars
+    text = demo_text(cfg, df, atr(df), 1 if a.side == "long" else -1)
     print(text)
     if a.dry_run:
         return
@@ -141,7 +142,7 @@ def main(argv=None):
         sp.add_argument("symbol", help="e.g. BTCUSDT, ETHUSDT, EURUSD, GBPUSD, USDJPY")
         common(sp)
         if name == "backtest":
-            sp.add_argument("--refresh", action="store_true", help="re-download data")
+            sp.add_argument("--refresh", action="store_true", help="update data (new bars only)")
             sp.add_argument("--no-sop", action="store_true", help="disable the SOP rule checklist")
         if name == "signal":
             sp.add_argument("--notify", action="store_true", help="send via Telegram")

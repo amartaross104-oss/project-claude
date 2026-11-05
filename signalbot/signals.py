@@ -10,7 +10,7 @@ from .backtest import pick_side
 from .config import Config
 from .health import assess
 from . import sop as sop_mod
-from .data import DATA_DIR, INTERVAL_MS
+from .data import DATA_DIR, INTERVAL_MS, is_crypto
 from .model import fit_final, predict_last, walk_forward
 from .pipeline import build
 
@@ -140,9 +140,11 @@ def next_run(now: float, interval: str, delay_s: int = 60) -> float:
     return (now // sec + 1) * sec + delay_s
 
 
-def watch(cfgs: list[Config], send, delay_s: int = 60, log=print, persist: bool = True,
+def watch(cfgs: list[Config], send, delay_s: int | None = None, log=print, persist: bool = True,
           sop=None, health_gate: bool = False) -> None:
     interval = cfgs[0].interval
+    if delay_s is None:  # Binance candles are final right away; Yahoo forex lags ~1 min
+        delay_s = 5 if all(is_crypto(c.symbol) for c in cfgs) else 60
     log(f"watching {', '.join(c.symbol for c in cfgs)} on {interval}; Ctrl+C to stop")
     while True:
         check_once(cfgs, send, log=log, persist=persist, sop=sop, health_gate=health_gate)

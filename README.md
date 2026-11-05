@@ -45,6 +45,12 @@ python -m signalbot watch BTCUSDT --interval 4h --dry-run --once    # preview wi
 Keep it running 24/7 on a VPS / always-on machine (e.g. `tmux`, `systemd`, or Docker), or use `--once` from cron
 (`5 */4 * * *`). Secrets stay in environment variables; never commit them. `data/` (cache + dedupe state) is git-ignored.
 
+## Speed
+Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
+`demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)
+and 60 s for forex (Yahoo lags ~1 min). The health gate retrains walk-forward models and takes longer, but only runs
+when a signal has already passed the SOP.
+
 ## Results (1h, walk-forward OOS, default settings, costs: crypto 20 bps, forex 2 bps round trip)
 | Symbol | Trades | Win rate | Expectancy | Random-side baseline |
 |---|---|---|---|---|

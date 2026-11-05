@@ -1,14 +1,20 @@
 """LightGBM classifier + purged expanding-window walk-forward."""
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
-from lightgbm import LGBMClassifier
 
 from .config import Config
 
+if TYPE_CHECKING:
+    from lightgbm import LGBMClassifier
 
-def new_model(seed: int) -> LGBMClassifier:
+
+def new_model(seed: int) -> "LGBMClassifier":
+    from lightgbm import LGBMClassifier  # lazy: ~1s import, not needed by demo/telegram commands
+
     return LGBMClassifier(
         n_estimators=250,
         learning_rate=0.03,

@@ -18,8 +18,9 @@ def is_crypto(symbol: str) -> bool:
     return symbol.upper().endswith(("USDT", "USDC", "BUSD"))
 
 
-def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0) -> pd.DataFrame:
-    start = int((time.time() - years * 365 * 86400) * 1000)
+def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0,
+                  start_ms: int | None = None) -> pd.DataFrame:
+    start = start_ms if start_ms is not None else int((time.time() - years * 365 * 86400) * 1000)
     rows: list[list] = []
     while True:
         r = requests.get(
@@ -42,13 +43,13 @@ def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0) -> pd.D
     return df.set_index("time").astype(float)
 
 
-def fetch_yahoo(symbol: str, interval: str = "1h") -> pd.DataFrame:
+def fetch_yahoo(symbol: str, interval: str = "1h", range_: str = "730d") -> pd.DataFrame:
     if interval != "1h":  # Yahoo has no 4h bars: build them from 1h
-        return resample(fetch_yahoo(symbol, "1h"), interval)
+        return resample(fetch_yahoo(symbol, "1h", range_), interval)
     # Yahoo limits 1h data to the last ~730 days.
     r = requests.get(
         YAHOO_URL.format(ticker=f"{symbol}=X"),
-        params={"interval": interval, "range": "730d"},
+        params={"interval": interval, "range": range_},
         headers=HEADERS,
         timeout=30,
     )
@@ -94,10 +95,39 @@ def fetch(symbol: str, interval: str = "1h") -> pd.DataFrame:
     return df
 
 
-def load(symbol: str, interval: str = "1h", refresh: bool = False) -> pd.DataFrame:
+def update(symbol: str, interval: str = "1h") -> pd.DataFrame:
+    """Fast refresh: download only the bars after the cached ones (full download if no/old cache)."""
+    symbol = symbol.upper()
     path = cache_path(symbol, interval)
-    if refresh or not path.exists():
+    if not path.exists():
+        return fetch(symbol, interval)
+    old = pd.read_csv(path, index_col="time", parse_dates=True)
+    bar = pd.Timedelta(milliseconds=INTERVAL_MS[interval])
+    age = pd.Timestamp.now(tz="UTC") - old.index[-1]
+    try:
+        if is_crypto(symbol):
+            new = fetch_binance(symbol, interval, start_ms=int(old.index[-1].timestamp() * 1000))
+        elif age <= pd.Timedelta(days=5):
+            new = fetch_yahoo(symbol, interval, "10d").iloc[2:]  # first buckets may be partial
+        else:
+            return fetch(symbol, interval)
+    except requests.RequestException:
+        return old  # offline: keep what we have
+    if new.empty or new.index[0] > old.index[-1] + bar:  # nothing new / gap -> be safe
+        return old if new.empty else fetch(symbol, interval)
+    df = pd.concat([old[old.index < new.index[0]], new])
+    df = df[~df.index.duplicated(keep="last")].sort_index()
+    df.to_csv(path)
+    return df
+
+
+def load(symbol: str, interval: str = "1h", refresh: bool = False, full: bool = False) -> pd.DataFrame:
+    """refresh=True: incremental update; full=True: re-download everything."""
+    path = cache_path(symbol, interval)
+    if full:
         df = fetch(symbol, interval)
+    elif refresh or not path.exists():
+        df = update(symbol, interval)
     else:
         df = pd.read_csv(path, index_col="time", parse_dates=True)
     return drop_unclosed(df, interval)

@@ -95,3 +95,26 @@ def test_demo_message_is_clearly_labelled_test():
     assert "LONG BTCUSDT" in text and "TP " in text and "SL " in text
     assert "n/a (test message)" in text and "No model" in text
     assert "SHORT" in demo_text(cfg, df, atr(df), -1)
+
+
+def test_incremental_update_only_fetches_new_bars(tmp_path, monkeypatch):
+    from signalbot import data
+    monkeypatch.setattr(data, "DATA_DIR", tmp_path)
+    idx = pd.date_range("2024-01-01", periods=10, freq="4h", tz="UTC")
+    old = pd.DataFrame({"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1.0}, index=idx)
+    old.index.name = "time"
+    old.to_csv(data.cache_path("BTCUSDT", "4h"))
+    seen = {}
+
+    def fake(symbol, interval, years=3.0, start_ms=None):
+        seen["start"] = start_ms
+        j = pd.date_range(idx[-1], periods=3, freq="4h", tz="UTC")  # last bar re-sent + 2 new
+        d = pd.DataFrame({"open": 9.0, "high": 9.0, "low": 9.0, "close": 9.0, "volume": 9.0}, index=j)
+        d.index.name = "time"
+        return d
+
+    monkeypatch.setattr(data, "fetch_binance", fake)
+    df = data.update("BTCUSDT", "4h")
+    assert seen["start"] == int(idx[-1].timestamp() * 1000)   # asked only from the last cached bar
+    assert len(df) == 12 and df.index.is_monotonic_increasing and not df.index.duplicated().any()
+    assert df["close"].iloc[-1] == 9.0 and df["close"].iloc[0] == 1.5  # old kept, new overrides tail
