@@ -85,6 +85,9 @@ expectancy +0.04 R before fees but -0.18 R at 8 bps and -0.50 R at 20 bps round 
 Break-even needs fees + spread + slippage below ~2 bps. Every message carries an UNVALIDATED label; `--max-per-day`
 (default 6) caps messages per UTC day; `--sop` adds the SOP checklist (about 0.5 signals/day, still negative).
 Windows: run `scripts\windows\setup_task.ps1` first, then `scripts\windows\setup_scalp_task.ps1` (every 15 minutes).
+The scalp message is short: direction, Entry (reference price = last close), Julat masuk (entry zone = entry +/- 0.25 ATR; do not
+chase outside it), TP, SL (both 1.5 ATR from entry), expiry (16 bars = 4 h), the UNVALIDATED label and the daily counter.
+`--full-message` restores the detailed format with model probabilities.
 
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
