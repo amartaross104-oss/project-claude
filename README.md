@@ -52,6 +52,15 @@ shows a statistically significant edge. Best-looking variant: ETHUSDT 1d + fundi
 +0.10 R/trade, but t = 0.83, 95% CI [-0.13, +0.32] R and -0.11 R over the last year: consistent with luck after trying
 many variants. The health gate therefore also requires t >= 1.64 (one-sided 95%) and blocks all four pairs.
 
+## Trend-following mode (rule-based, no ML)
+`python -m signalbot trend BTCUSDT ETHUSDT --system 2` (1 = Turtle 20/10, 2 = 55/20; daily). Donchian breakout entry at
+the next open, stop 2 ATR, exit on the opposite channel. No fitted parameters; both systems were fixed before testing.
+Findings (2016/2019-2026): crypto longs are positive (pooled t about 1.8-1.9) but driven by 2020 and by crypto's bull
+market (BTC x9, ETH x13 buy&hold), roughly flat over the last 2 years; crypto shorts and all forex are not profitable.
+No single pair reaches t >= 1.64 on its own, so the per-symbol, per-direction health gate (>= 30 trades, PF >= 1.2,
+expectancy > 0, t >= 1.64, positive last 2 years) blocks every signal by default. `--paper` still emits breakout signals,
+clearly labelled PAPER / UNVALIDATED, so the idea can be forward-tested without risking money.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)

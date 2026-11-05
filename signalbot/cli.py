@@ -169,6 +169,8 @@ def main(argv=None):
     sp.add_argument("--side", choices=["long", "short"], default="long")
     sp.add_argument("--dry-run", action="store_true", help="print only, do not send")
     sp.set_defaults(fn=cmd_demo)
+    from .trend_cli import add_parser as _add_trend
+    _add_trend(sub)
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)
     a = ap.parse_args(argv)
