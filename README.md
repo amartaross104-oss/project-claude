@@ -19,6 +19,19 @@ python -m pytest
 ```
 Key flags: `--margin` (main trade filter: P(dir) − P(opposite)), `--thr`, `--tp-mult`, `--horizon`, `--cost-bps`.
 
+## Telegram alerts
+1. In Telegram, chat with **@BotFather** → `/newbot` → copy the **bot token**.
+2. Open your new bot and press **Start** (for a group/channel: add the bot, post a message; a channel needs the bot as admin).
+3. `export TELEGRAM_BOT_TOKEN=...` then `python -m signalbot chatid` → copy the `TELEGRAM_CHAT_ID`.
+4. `export TELEGRAM_CHAT_ID=...` then `python -m signalbot telegram-test` (you should get a message).
+5. Run the watcher (checks right after every bar close, sends only new signals, no repeats while a same-side trade is "open"):
+```bash
+python -m signalbot watch BTCUSDT ETHUSDT --interval 4h            # live, keeps running
+python -m signalbot watch BTCUSDT --interval 4h --dry-run --once    # preview without sending
+```
+Keep it running 24/7 on a VPS / always-on machine (e.g. `tmux`, `systemd`, or Docker), or use `--once` from cron
+(`5 */4 * * *`). Secrets stay in environment variables; never commit them. `data/` (cache + dedupe state) is git-ignored.
+
 ## Results (1h, walk-forward OOS, default settings, costs: crypto 20 bps, forex 2 bps round trip)
 | Symbol | Trades | Win rate | Expectancy | Random-side baseline |
 |---|---|---|---|---|
