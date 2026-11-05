@@ -19,6 +19,19 @@ python -m pytest
 ```
 Key flags: `--margin` (main trade filter: P(dir) − P(opposite)), `--thr`, `--tp-mult`, `--horizon`, `--cost-bps`.
 
+## Signal quality gates (why the bot may stay silent)
+A model signal is only sent if it passes **both** layers:
+1. **SOP checklist** (`signalbot/sop.py`): trend (EMA50/EMA200 + close vs EMA50), RSI not extreme (70/30),
+   volatility within the 20–90th percentile of the last 500 bars, round-trip cost <= 0.15 R, and for forex an
+   08:00–17:00 UTC entry session. The message shows each rule as OK/X.
+2. **Strategy health gate** (`signalbot/health.py`): a fresh walk-forward backtest (after costs) must show
+   >= 50 OOS trades, profit factor >= 1.2, positive expectancy, an edge over random sides, and positive
+   expectancy over the last 180 days.
+`python -m signalbot health EURUSD --interval 4h` shows the verdict; `--no-sop` / `--no-health-gate` disable a layer
+(not recommended). **Current verdict: all four tested pairs (BTC, ETH, EURUSD, GBPUSD on 4h) FAIL the gate
+(PF 0.70–0.79), so the bot sends nothing.** That is intended: no demonstrated edge, no signal.
+No gate can guarantee profit; it only stops signals from a strategy that is not currently working.
+
 ## Telegram alerts
 1. In Telegram, chat with **@BotFather** → `/newbot` → copy the **bot token**.
 2. Open your new bot and press **Start** (for a group/channel: add the bot, post a message; a channel needs the bot as admin).

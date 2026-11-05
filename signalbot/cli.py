@@ -10,7 +10,10 @@ from .backtest import random_baseline, run_backtest
 from .config import Config
 from .model import fit_final, predict_last, walk_forward
 from .notify import find_chat_ids, send_telegram
+from .health import assess
+from .model import walk_forward as _wf  # noqa: F401
 from .signals import check_once, compute_signal, watch
+from .sop import SOP, evaluate as sop_evaluate, gate as sop_gate
 from .pipeline import build
 
 
@@ -29,10 +32,11 @@ def cmd_backtest(a):
     ds = build(cfg, refresh=a.refresh)
     proba = walk_forward(ds.X, ds.y, ds.barriers.valid, cfg)
     oos = ~np.isnan(proba[:, 0])
-    res = run_backtest(ds.df, ds.barriers, ds.atr, proba, cfg)
+    g = None if a.no_sop else sop_gate(sop_evaluate(ds.df, ds.atr, cfg, SOP()))
+    res = run_backtest(ds.df, ds.barriers, ds.atr, proba, cfg, gate=g)
     s = res.stats
     print(f"\n=== {cfg.symbol} {cfg.interval} | walk-forward OOS from {ds.df.index[oos][0]:%Y-%m-%d} "
-          f"({oos.sum()} bars) | cost {cfg.cost_bps:g} bps/trade | thr {cfg.thr} margin {cfg.margin} ===")
+          f"({oos.sum()} bars) | cost {cfg.cost_bps:g} bps/trade | thr {cfg.thr} margin {cfg.margin} | SOP {'off' if a.no_sop else 'on'} ===")
     if not s["trades"]:
         print("No trades. Try lowering --margin.")
         return
@@ -42,13 +46,16 @@ def cmd_backtest(a):
     print(f"profit factor {s['profit_factor']:.2f}")
     print(f"return        {s['total_return']:+.1%}  (risk {cfg.risk:.0%}/trade, compounded)")
     print(f"max drawdown  {s['max_drawdown']:.1%}")
-    base = random_baseline(ds.df, ds.barriers, ds.atr, proba, cfg)
+    base = random_baseline(ds.df, ds.barriers, ds.atr, proba, cfg, gate=g)
     print(f"random-side baseline expectancy {base:+.3f} R  "
           f"(model edge over random: {s['expectancy_r'] - base:+.3f} R)")
+    h = assess(ds, proba, cfg, g)
+    print("HEALTH GATE:", "PASS - signals would be sent" if h.ok
+          else "FAIL - signals would be blocked: " + "; ".join(h.reasons))
 
 
 def cmd_signal(a):
-    sig = compute_signal(_cfg(a))
+    sig = compute_signal(_cfg(a), sop=None if a.no_sop else SOP(), health_gate=not a.no_health_gate)
     print(sig.message())
     if a.notify and sig.side:
         send_telegram(sig.message())
@@ -57,11 +64,25 @@ def cmd_signal(a):
 
 def cmd_watch(a):
     cfgs = [_cfg(a, sym) for sym in a.symbols]
+    sop, hg = (None if a.no_sop else SOP()), not a.no_health_gate
     send = (lambda m: print("[dry-run]\n" + m)) if a.dry_run else send_telegram
     if a.once:
-        check_once(cfgs, send, persist=not a.dry_run)
+        check_once(cfgs, send, persist=not a.dry_run, sop=sop, health_gate=hg)
     else:
-        watch(cfgs, send, persist=not a.dry_run)
+        watch(cfgs, send, persist=not a.dry_run, sop=sop, health_gate=hg)
+
+
+def cmd_health(a):
+    cfg = _cfg(a)
+    ds = build(cfg, refresh=a.refresh)
+    proba = _wf(ds.X, ds.y, ds.barriers.valid, cfg)
+    g = None if a.no_sop else sop_gate(sop_evaluate(ds.df, ds.atr, cfg, SOP()))
+    h = assess(ds, proba, cfg, g)
+    print(f"{cfg.symbol} {cfg.interval}: {h.line()} | random-side {h.baseline:+.3f} R")
+    if h.recent:
+        print(f"last 180d: {h.recent.get('trades', 0)} trades, "
+              f"{h.recent.get('expectancy_r', float('nan')):+.3f} R/trade")
+    print("PASS - signals would be sent" if h.ok else "FAIL - signals blocked: " + "; ".join(h.reasons))
 
 
 def cmd_telegram_test(a):
@@ -90,22 +111,36 @@ def main(argv=None):
                         help="max bars per trade (default per interval)")
         sp.add_argument("--cost-bps", type=float, default=None, help="round-trip cost in bps")
 
+    def gates(sp):
+        sp.add_argument("--no-sop", action="store_true", help="disable the SOP rule checklist")
+        sp.add_argument("--no-health-gate", action="store_true",
+                        help="send signals even if the backtest shows no edge (NOT recommended)")
+
     for name, fn in (("fetch", cmd_fetch), ("backtest", cmd_backtest), ("signal", cmd_signal)):
         sp = sub.add_parser(name)
         sp.add_argument("symbol", help="e.g. BTCUSDT, ETHUSDT, EURUSD, GBPUSD, USDJPY")
         common(sp)
         if name == "backtest":
             sp.add_argument("--refresh", action="store_true", help="re-download data")
+            sp.add_argument("--no-sop", action="store_true", help="disable the SOP rule checklist")
         if name == "signal":
             sp.add_argument("--notify", action="store_true", help="send via Telegram")
+            gates(sp)
         sp.set_defaults(fn=fn)
 
     sp = sub.add_parser("watch", help="check at every bar close and push new signals to Telegram")
     sp.add_argument("symbols", nargs="+", help="e.g. BTCUSDT ETHUSDT EURUSD")
     common(sp)
+    gates(sp)
     sp.add_argument("--once", action="store_true", help="check once and exit (for cron)")
     sp.add_argument("--dry-run", action="store_true", help="print instead of sending to Telegram")
     sp.set_defaults(fn=cmd_watch)
+    sp = sub.add_parser("health", help="show whether the strategy currently passes the health gate")
+    sp.add_argument("symbol")
+    common(sp)
+    sp.add_argument("--refresh", action="store_true")
+    sp.add_argument("--no-sop", action="store_true")
+    sp.set_defaults(fn=cmd_health)
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)
     a = ap.parse_args(argv)

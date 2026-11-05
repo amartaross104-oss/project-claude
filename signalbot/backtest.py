@@ -40,7 +40,9 @@ def trade_r(side: int, b: Barriers, t: int, stop_frac: float, cost: float) -> fl
     return (gross - cost) / stop_frac
 
 
-def run_backtest(df, b: Barriers, atr_s, proba: np.ndarray, cfg: Config, sides=None) -> Result:
+def run_backtest(df, b: Barriers, atr_s, proba: np.ndarray, cfg: Config, sides=None,
+                 gate=None) -> Result:
+    """gate = (allow_long, allow_short) boolean arrays (SOP); ignored when `sides` is given."""
     cost = cfg.cost_bps / 1e4
     a = atr_s.to_numpy(float)
     n = len(df)
@@ -49,6 +51,9 @@ def run_backtest(df, b: Barriers, atr_s, proba: np.ndarray, cfg: Config, sides=N
         if t < busy_until or not b.valid[t]:
             continue
         side = sides[t] if sides is not None else pick_side(proba[t], cfg)
+        if sides is None and gate is not None:
+            if (side == 1 and not gate[0][t]) or (side == -1 and not gate[1][t]):
+                continue
         if side == 0:
             continue
         stop_frac = cfg.tp_mult * a[t] / b.entry[t]
@@ -85,10 +90,12 @@ def summarize(trades: pd.DataFrame, cfg: Config) -> dict:
     )
 
 
-def random_baseline(df, b, atr_s, proba, cfg: Config, runs: int = 30) -> float:
+def random_baseline(df, b, atr_s, proba, cfg: Config, runs: int = 30, gate=None) -> float:
     """Mean expectancy (R) when the model's trade timing is kept but sides are random."""
     rng = np.random.default_rng(cfg.seed)
     base = np.array([pick_side(p, cfg) for p in proba])
+    if gate is not None:
+        base = np.where(((base == 1) & ~gate[0]) | ((base == -1) & ~gate[1]), 0, base)
     exp = []
     for _ in range(runs):
         sides = np.where(base != 0, rng.choice([-1, 1], size=len(base)), 0)

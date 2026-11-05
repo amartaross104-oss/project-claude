@@ -31,7 +31,7 @@ def test_dedupe_rules(tmp_path):
 
 
 def test_check_once_sends_once_and_dry_run_does_not_persist(tmp_path, monkeypatch):
-    monkeypatch.setattr(signals, "compute_signal", lambda cfg: sig(1))
+    monkeypatch.setattr(signals, "compute_signal", lambda cfg, **kw: sig(1))
     sent, path = [], tmp_path / "s.json"
     check_once([Config(interval="4h")], sent.append, path, log=lambda *_: None, persist=False)
     check_once([Config(interval="4h")], sent.append, path, log=lambda *_: None, persist=False)
@@ -43,7 +43,7 @@ def test_check_once_sends_once_and_dry_run_does_not_persist(tmp_path, monkeypatc
 
 
 def test_check_once_survives_errors(monkeypatch, tmp_path):
-    def boom(cfg):
+    def boom(cfg, **kw):
         raise RuntimeError("network down")
     monkeypatch.setattr(signals, "compute_signal", boom)
     logs = []
