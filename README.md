@@ -66,6 +66,18 @@ python -m signalbot trend BTCUSDT ETHUSDT --system 2 --paper --dry-run          
 ```
 Each breakout bar is sent at most once. Use crypto only for paper trading; forex has no edge here.
 
+## Automatic daily run (pick ONE)
+**A) Windows Task Scheduler (free, your PC must be on at the scheduled time).** In PowerShell, from the project folder:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\setup_task.ps1
+Start-ScheduledTask -TaskName SignalbotTrendPaper      # test now
+Get-Content data\task.log -Tail 30                      # see what happened
+```
+The script asks for the bot token (hidden) and Chat ID and stores them as user environment variables.
+**B) GitHub Actions** (`.github/workflows/trend-signal.yml`, no PC needed): add repository secrets `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID`; it runs daily 00:20 UTC. Without the secrets it only does a dry run, so A and B never double-send
+unless you set the secrets in both. Use "Run workflow" with `send_test` to verify the secrets.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)
