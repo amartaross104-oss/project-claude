@@ -1,0 +1,58 @@
+name: Daily trend signal (paper)
+
+on:
+  schedule:
+    # 00:20 UTC = 08:20 Malaysia time: just after the daily candle closes (00:00 UTC).
+    # GitHub may delay scheduled runs by several minutes.
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print only, do not send to Telegram"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trend-signal
+  cancel-in-progress: false
+
+jobs:
+  signal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Remember which bar was already sent so a re-run never sends a duplicate.
+      - name: Restore sent-signal state
+        uses: actions/cache@v4
+        with:
+          path: data/last_signals.json
+          key: signal-state-${{ github.run_id }}
+          restore-keys: signal-state-
+
+      - name: Check for new breakout and notify
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MANUAL_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          MODE="--notify"
+          if [ "$MANUAL_DRY_RUN" = "true" ]; then
+            echo "Manual dry run: nothing will be sent."; MODE="--notify --dry-run"
+          elif [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::Telegram secrets are not set; running as dry run (nothing sent)."
+            MODE="--notify --dry-run"
+          fi
+          # Crypto only: forex showed no edge. --paper labels every message PAPER / UNVALIDATED.
+          python -m signalbot trend BTCUSDT ETHUSDT --system 2 --paper $MODE
