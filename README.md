@@ -89,6 +89,10 @@ The scalp message is short: direction, Entry (reference price = last close), Jul
 chase outside it), TP, SL (both 1.5 ATR from entry), expiry (16 bars = 4 h), the UNVALIDATED label and the daily counter.
 `--full-message` restores the detailed format with model probabilities.
 
+## No pop-up windows
+The scheduled tasks start through `wscript.exe` + `scripts\windows\run_hidden.vbs`, so no CMD window appears. If you set the
+tasks up with an older version, run `powershell -ExecutionPolicy Bypass -File scripts\windows\hide_windows.ps1` once.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)

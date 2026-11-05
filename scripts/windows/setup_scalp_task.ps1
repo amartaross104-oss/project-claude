@@ -19,7 +19,9 @@ $mins = [math]::Ceiling(($now - $now.Date).TotalMinutes / 15) * 15
 $start = $now.Date.AddMinutes($mins).AddSeconds(20)
 if ($start -le $now) { $start = $start.AddMinutes(15) }
 
-$action   = New-ScheduledTaskAction -Execute $runner -WorkingDirectory (Split-Path $runner -Parent)
+$vbs      = Join-Path $PSScriptRoot "run_hidden.vbs"   # runs the .cmd with no visible window
+$action   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`" `"$runner`"" `
+            -WorkingDirectory (Split-Path $runner -Parent)
 $trigger  = New-ScheduledTaskTrigger -Once -At $start -RepetitionInterval (New-TimeSpan -Minutes 15) `
             -RepetitionDuration (New-TimeSpan -Days 3650)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `

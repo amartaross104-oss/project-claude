@@ -23,7 +23,9 @@ if ($token -notmatch '^\d+:[A-Za-z0-9_-]{30,}$') { throw "Format token tidak sah
 [Environment]::SetEnvironmentVariable("TELEGRAM_BOT_TOKEN", $token, "User")
 [Environment]::SetEnvironmentVariable("TELEGRAM_CHAT_ID", $chat, "User")
 
-$action   = New-ScheduledTaskAction -Execute $runner -WorkingDirectory (Split-Path $runner -Parent)
+$vbs      = Join-Path $PSScriptRoot "run_hidden.vbs"   # runs the .cmd with no visible window
+$action   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`" `"$runner`"" `
+            -WorkingDirectory (Split-Path $runner -Parent)
 $trigger  = New-ScheduledTaskTrigger -Daily -At $Time
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries `
             -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
