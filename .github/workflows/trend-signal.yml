@@ -11,6 +11,10 @@ on:
         description: "Print only, do not send to Telegram"
         type: boolean
         default: true
+      send_test:
+        description: "Send a Telegram test message to verify the secrets (ignores dry_run)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,6 +44,13 @@ jobs:
           path: data/last_signals.json
           key: signal-state-${{ github.run_id }}
           restore-keys: signal-state-
+
+      - name: Send Telegram test message
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.send_test }}
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m signalbot telegram-test
 
       - name: Check for new breakout and notify
         env:
