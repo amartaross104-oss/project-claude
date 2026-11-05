@@ -34,6 +34,9 @@ class Signal:
     blocked: str = ""              # why a model signal was NOT sent
     label: str = ""                # optional one-line warning prepended to the message
     footer: str = ""               # optional extra line (e.g. daily counter)
+    atr: float = 0.0               # ATR at the signal bar (entry zone width)
+    style: str = "full"            # "full" | "simple" (scalp-style short message)
+    zone_atr: float = 0.25         # entry zone = reference price +/- zone_atr * ATR
 
     def head(self) -> str:
         return (f"{self.symbol} {self.interval} | bar closed {self.bar_time:%Y-%m-%d %H:%M} UTC"
@@ -44,7 +47,26 @@ class Signal:
             return "Model probabilities: n/a (test message)"
         return f"P(down)={self.proba[0]:.2f} P(none)={self.proba[1]:.2f} P(up)={self.proba[2]:.2f}"
 
+    def _simple(self) -> str:
+        """Short message: direction, entry, entry zone, TP, SL, expiry. ASCII only (Windows log files)."""
+        half = self.zone_atr * self.atr
+        mins = self.horizon * INTERVAL_MS[self.interval] // 60_000
+        dur = f"{mins // 60} jam" if mins >= 60 and mins % 60 == 0 else f"{mins} minit"
+        lines = [f"{'LONG' if self.side == 1 else 'SHORT'} {self.symbol} {self.interval}",
+                 f"Entry: {self.close:.5g}",
+                 f"Julat masuk: {self.close - half:.5g} - {self.close + half:.5g}",
+                 f"TP: {self.tp:.5g}",
+                 f"SL: {self.sl:.5g}",
+                 f"Tamat: {self.horizon} bar ({dur})"]
+        if self.label:
+            lines.append(self.label)
+        if self.footer:
+            lines.append(self.footer)
+        return "\n".join(lines)
+
     def message(self) -> str:
+        if self.style == "simple" and self.side != 0:
+            return self._simple()
         body = self._body()
         if self.label:
             body = self.label + "\n" + body
@@ -95,7 +117,8 @@ def compute_signal(cfg: Config, refresh: bool = True, sop: "sop_mod.SOP | None" 
     dist = cfg.tp_mult * float(ds.atr.iloc[-1])
     return Signal(cfg.symbol, cfg.interval, ds.df.index[-1], side, close,
                   close + side * dist if side else None, close - side * dist if side else None,
-                  tuple(float(x) for x in p), cfg.horizon, cfg.risk, checks, health_line, blocked)
+                  tuple(float(x) for x in p), cfg.horizon, cfg.risk, checks, health_line, blocked,
+                  atr=float(ds.atr.iloc[-1]))
 
 
 def _load_state(path: Path) -> dict:
@@ -133,11 +156,11 @@ def daily_count(state: dict, day: str) -> int:
 
 def check_once(cfgs: list[Config], send, state_path: Path = STATE_FILE, log=print,
                persist: bool = True, sop=None, health_gate: bool = False,
-               max_per_day: int | None = None, label: str = "") -> None:
+               max_per_day: int | None = None, label: str = "", style: str = "full") -> None:
     for cfg in cfgs:
         try:
             sig = compute_signal(cfg, sop=sop, health_gate=health_gate)
-            sig.label = label
+            sig.label, sig.style = label, style
             state = _load_state(state_path)
             if should_send(sig, state):
                 day = sig.bar_time.strftime("%Y-%m-%d")
@@ -165,14 +188,15 @@ def next_run(now: float, interval: str, delay_s: int = 60) -> float:
 
 
 def watch(cfgs: list[Config], send, delay_s: int | None = None, log=print, persist: bool = True,
-          sop=None, health_gate: bool = False, max_per_day: int | None = None, label: str = "") -> None:
+          sop=None, health_gate: bool = False, max_per_day: int | None = None, label: str = "",
+          style: str = "full") -> None:
     interval = cfgs[0].interval
     if delay_s is None:  # Binance candles are final right away; Yahoo forex lags ~1 min
         delay_s = 5 if all(is_crypto(c.symbol) for c in cfgs) else 60
     log(f"watching {', '.join(c.symbol for c in cfgs)} on {interval}; Ctrl+C to stop")
     while True:
         check_once(cfgs, send, log=log, persist=persist, sop=sop, health_gate=health_gate,
-                   max_per_day=max_per_day, label=label)
+                   max_per_day=max_per_day, label=label, style=style)
         wake = next_run(time.time(), interval, delay_s)
         log(f"next check at {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(wake))} UTC")
         time.sleep(max(1, wake - time.time()))

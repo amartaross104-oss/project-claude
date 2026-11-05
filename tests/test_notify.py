@@ -91,3 +91,19 @@ def test_daily_cap_label_and_counter(tmp_path, monkeypatch):
 
 def test_message_without_label_unchanged():
     assert not sig(1).message().startswith("WARN") and "Signal " not in sig(1).message()
+
+
+def test_simple_message_has_entry_zone_tp_sl_and_is_ascii():
+    s = sig(1, "2026-01-01 00:00", "15m")
+    s.close, s.tp, s.sl, s.atr, s.horizon = 100.0, 101.5, 98.5, 1.0, 16
+    s.style, s.label, s.footer = "simple", "UNVALIDATED: x", "Signal 1/6 today (UTC)"
+    m = s.message()
+    assert m.splitlines() == ["LONG BTCUSDT 15m", "Entry: 100", "Julat masuk: 99.75 - 100.25", "TP: 101.5",
+                              "SL: 98.5", "Tamat: 16 bar (4 jam)", "UNVALIDATED: x", "Signal 1/6 today (UTC)"]
+    m.encode("ascii")                                    # must not crash cp1252/ascii log redirects
+    short = sig(-1, "2026-01-01 00:00", "15m")
+    short.close, short.tp, short.sl, short.atr, short.horizon, short.style = 100.0, 98.5, 101.5, 1.0, 4, "simple"
+    assert short.message().startswith("SHORT BTCUSDT 15m") and "Tamat: 4 bar (60 minit)" not in short.message() \
+        and "Tamat: 4 bar (1 jam)" in short.message()
+    s.side = 0                                            # no-trade messages keep the detailed format
+    assert "NO TRADE" in s.message()
