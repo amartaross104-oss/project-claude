@@ -107,3 +107,15 @@ def test_simple_message_has_entry_zone_tp_sl_and_is_ascii():
         and "Tamat: 4 bar (1 jam)" in short.message()
     s.side = 0                                            # no-trade messages keep the detailed format
     assert "NO TRADE" in s.message()
+
+
+def test_dry_run_previews_even_if_bar_already_sent(tmp_path, monkeypatch):
+    monkeypatch.setattr(signals, "compute_signal", lambda cfg, **kw: sig(1))
+    path, sent, logs = tmp_path / "s.json", [], []
+    check_once([Config(interval="4h")], sent.append, path, log=lambda *a: None)          # real send, remembered
+    assert len(sent) == 1
+    check_once([Config(interval="4h")], sent.append, path, log=lambda *a: None)          # duplicate: skipped
+    assert len(sent) == 1
+    check_once([Config(interval="4h")], sent.append, path, log=logs.append, persist=False)  # preview: shown
+    assert len(sent) == 2 and any("preview" in str(x) for x in logs)
+    assert signals._load_state(path)["BTCUSDT_4h"]["bar"] == sig(1).bar_time.isoformat()   # state untouched

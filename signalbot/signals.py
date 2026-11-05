@@ -162,7 +162,11 @@ def check_once(cfgs: list[Config], send, state_path: Path = STATE_FILE, log=prin
             sig = compute_signal(cfg, sop=sop, health_gate=health_gate)
             sig.label, sig.style = label, style
             state = _load_state(state_path)
-            if should_send(sig, state):
+            ok = should_send(sig, state)
+            preview_dup = (not persist) and (not ok) and sig.side != 0
+            if preview_dup:  # dry-run is a preview: show the message even if this bar was already sent
+                log("[preview] this bar was already sent earlier; showing the message anyway")
+            if ok or preview_dup:
                 day = sig.bar_time.strftime("%Y-%m-%d")
                 n = daily_count(state, day)
                 if max_per_day is not None and n >= max_per_day:
