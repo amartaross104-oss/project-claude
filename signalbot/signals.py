@@ -38,6 +38,8 @@ class Signal:
                 f" | close {self.close:.5g}")
 
     def probs(self) -> str:
+        if self.proba is None:
+            return "Model probabilities: n/a (test message)"
         return f"P(down)={self.proba[0]:.2f} P(none)={self.proba[1]:.2f} P(up)={self.proba[2]:.2f}"
 
     def message(self) -> str:

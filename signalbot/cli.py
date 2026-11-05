@@ -12,7 +12,7 @@ from .model import fit_final, predict_last, walk_forward
 from .notify import find_chat_ids, send_telegram
 from .health import assess
 from .model import walk_forward as _wf  # noqa: F401
-from .signals import check_once, compute_signal, watch
+from .signals import Signal, check_once, compute_signal, watch
 from .sop import SOP, evaluate as sop_evaluate, gate as sop_gate
 from .pipeline import build
 
@@ -85,6 +85,26 @@ def cmd_health(a):
     print("PASS - signals would be sent" if h.ok else "FAIL - signals blocked: " + "; ".join(h.reasons))
 
 
+def demo_text(cfg: Config, df, atr_s, side: int) -> str:
+    close = float(df["close"].iloc[-1])
+    dist = cfg.tp_mult * float(atr_s.iloc[-1])
+    sig = Signal(cfg.symbol, cfg.interval, df.index[-1], side, close, close + side * dist,
+                 close - side * dist, None, cfg.horizon, cfg.risk, None,
+                 "TEST ONLY: levels from live price + ATR. No model, no SOP, no edge checked.")
+    return "TEST ONLY - NOT A REAL SIGNAL - DO NOT TRADE\n" + sig.message()
+
+
+def cmd_demo(a):
+    cfg = _cfg(a)
+    ds = build(cfg, refresh=True)
+    text = demo_text(cfg, ds.df, ds.atr, 1 if a.side == "long" else -1)
+    print(text)
+    if a.dry_run:
+        return
+    send_telegram(text)
+    print("\nTest message sent. Check your Telegram.")
+
+
 def cmd_telegram_test(a):
     send_telegram("signalbot connected. You will receive trade signals here.")
     print("Test message sent. Check your Telegram.")
@@ -141,6 +161,12 @@ def main(argv=None):
     sp.add_argument("--refresh", action="store_true")
     sp.add_argument("--no-sop", action="store_true")
     sp.set_defaults(fn=cmd_health)
+    sp = sub.add_parser("demo", help="send a clearly-labelled TEST signal to Telegram (not a real signal)")
+    sp.add_argument("symbol", nargs="?", default="BTCUSDT")
+    common(sp)
+    sp.add_argument("--side", choices=["long", "short"], default="long")
+    sp.add_argument("--dry-run", action="store_true", help="print only, do not send")
+    sp.set_defaults(fn=cmd_demo)
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)
     a = ap.parse_args(argv)

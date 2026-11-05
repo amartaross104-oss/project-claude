@@ -84,3 +84,14 @@ def test_sent_signal_shows_sop_checklist_and_health():
                        "Backtest OOS: 80 trades, PF 1.40, +0.15 R/trade, win 52%")
     m = s.message()
     assert "SOP: trend OK rsi OK" in m and "PF 1.40" in m
+
+
+def test_demo_message_is_clearly_labelled_test():
+    from signalbot.cli import demo_text
+    cfg = Config(symbol="BTCUSDT", interval="4h", cost_bps=20.0)
+    df = synth(300)
+    text = demo_text(cfg, df, atr(df), 1)
+    assert text.startswith("TEST ONLY - NOT A REAL SIGNAL")
+    assert "LONG BTCUSDT" in text and "TP " in text and "SL " in text
+    assert "n/a (test message)" in text and "No model" in text
+    assert "SHORT" in demo_text(cfg, df, atr(df), -1)
