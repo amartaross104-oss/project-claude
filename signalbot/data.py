@@ -43,6 +43,8 @@ def fetch_binance(symbol: str, interval: str = "1h", years: float = 3.0) -> pd.D
 
 
 def fetch_yahoo(symbol: str, interval: str = "1h") -> pd.DataFrame:
+    if interval != "1h":  # Yahoo has no 4h bars: build them from 1h
+        return resample(fetch_yahoo(symbol, "1h"), interval)
     # Yahoo limits 1h data to the last ~730 days.
     r = requests.get(
         YAHOO_URL.format(ticker=f"{symbol}=X"),
@@ -59,6 +61,14 @@ def fetch_yahoo(symbol: str, interval: str = "1h") -> pd.DataFrame:
     )
     df.index.name = "time"
     return df.dropna(subset=["open", "high", "low", "close"]).fillna({"volume": 0.0})
+
+
+def resample(df: pd.DataFrame, interval: str) -> pd.DataFrame:
+    rule = {"15m": "15min", "1h": "1h", "4h": "4h"}[interval]
+    out = df.resample(rule).agg(
+        {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
+    )
+    return out.dropna(subset=["close"])
 
 
 def drop_unclosed(df: pd.DataFrame, interval: str) -> pd.DataFrame:

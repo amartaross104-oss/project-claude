@@ -81,7 +81,7 @@ def main(argv=None):
         sp.add_argument("--margin", type=float, default=0.10,
                         help="min P(direction)-P(opposite); main trade filter")
         sp.add_argument("--tp-mult", type=float, default=1.5)
-        sp.add_argument("--horizon", type=int, default=24)
+        sp.add_argument("--horizon", type=int, default=None, help="max bars per trade (default per interval)")
         sp.add_argument("--cost-bps", type=float, default=None, help="round-trip cost in bps")
         if name == "backtest":
             sp.add_argument("--refresh", action="store_true", help="re-download data")

@@ -31,8 +31,20 @@ Honest reading: the model is only marginally better than random sides (BTC AUC �
 and costs make every setup lose. Zero-cost expectancy is ≈ 0 R, which also confirms the accounting is correct.
 A margin sweep (0.05–0.20) did not change that; further tuning on the same OOS data would just be overfitting.
 
+## Results (4h, same method, horizon 12 bars chosen before looking at results)
+| Symbol | Trades | Win rate | Expectancy | Random-side baseline | Model edge |
+|---|---|---|---|---|---|
+| BTCUSDT | 876 | 47.0% | −0.14 R | −0.11 R | −0.03 R |
+| ETHUSDT | 839 | 47.4% | −0.11 R | −0.08 R | −0.03 R |
+| EURUSD | 549 | 50.3% | −0.07 R | −0.07 R | −0.00 R |
+| GBPUSD | 551 | 47.0% | −0.10 R | −0.05 R | −0.05 R |
+
+4h cuts the cost drag (fewer trades, wider stops) but the model still adds nothing over random sides,
+so every pair still loses. Forex 4h bars are resampled from Yahoo 1h data (Yahoo has no native 4h).
+Use `--interval 4h` on `fetch`, `backtest` and `signal`.
+
 ## Ideas that might help (test each with the same walk-forward harness)
-- Higher timeframe (4h/1d) so costs are a smaller fraction of the stop distance; lower-cost venues/pairs.
+- Daily timeframe (4h was tested, still no edge); lower-cost venues/pairs.
 - Extra data: funding rate / open interest (crypto), economic calendar, news sentiment (LLM).
 - Regime filters, meta-labelling, per-symbol models, longer history.
 - Always paper trade for weeks before risking real money.
