@@ -74,3 +74,20 @@ def test_telegram_send_payload(monkeypatch):
     monkeypatch.setattr(notify.requests, "post", lambda url, json, timeout: calls.append((url, json)) or R())
     notify.send_telegram("hello")
     assert calls == [("https://api.telegram.org/botTOKEN/sendMessage", {"chat_id": "123", "text": "hello"})]
+
+
+def test_daily_cap_label_and_counter(tmp_path, monkeypatch):
+    seq = iter([sig(1, "2026-01-01 00:00", "15m"), sig(-1, "2026-01-01 04:00", "15m"),
+                sig(1, "2026-01-01 08:00", "15m"), sig(-1, "2026-01-02 00:00", "15m")])
+    monkeypatch.setattr(signals, "compute_signal", lambda cfg, **kw: next(seq))
+    sent, path = [], tmp_path / "s.json"
+    for _ in range(4):
+        check_once([Config(interval="15m")], sent.append, path, log=lambda *_: None,
+                   max_per_day=2, label="WARN LINE")
+    assert len(sent) == 3                                    # 3rd signal on day 1 is capped, day 2 resets
+    assert sent[0].startswith("WARN LINE\n") and sent[0].endswith("Signal 1/2 today (UTC)")
+    assert sent[1].endswith("Signal 2/2 today (UTC)") and sent[2].endswith("Signal 1/2 today (UTC)")
+
+
+def test_message_without_label_unchanged():
+    assert not sig(1).message().startswith("WARN") and "Signal " not in sig(1).message()

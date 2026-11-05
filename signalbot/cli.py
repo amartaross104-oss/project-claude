@@ -106,6 +106,21 @@ def cmd_demo(a):
     print("\nTest message sent. Check your Telegram.")
 
 
+SCALP_LABEL = ("UNVALIDATED SCALP: backtest is negative after fees (-0.18 R at 8 bps, -0.50 R at 20 bps). "
+               "Paper / very small size only.")
+
+
+def cmd_scalp(a):
+    cfgs = [_cfg(a, sym) for sym in a.symbols]
+    sop = SOP() if a.sop else None
+    send = (lambda m: print("[dry-run]\n" + m)) if a.dry_run else send_telegram
+    kw = dict(sop=sop, health_gate=False, max_per_day=a.max_per_day, label=SCALP_LABEL)
+    if a.once:
+        check_once(cfgs, send, persist=not a.dry_run, **kw)
+    else:
+        watch(cfgs, send, persist=not a.dry_run, **kw)
+
+
 def cmd_telegram_test(a):
     send_telegram("signalbot connected. You will receive trade signals here.")
     print("Test message sent. Check your Telegram.")
@@ -171,6 +186,14 @@ def main(argv=None):
     sp.set_defaults(fn=cmd_demo)
     from .trend_cli import add_parser as _add_trend
     _add_trend(sub)
+    sp = sub.add_parser("scalp", help="15m scalping signals to Telegram (UNVALIDATED: negative after fees)")
+    sp.add_argument("symbols", nargs="*", default=["BTCUSDT"], help="crypto only; only BTCUSDT was tested")
+    common(sp)
+    sp.set_defaults(interval="15m", horizon=16, fn=cmd_scalp)   # settings used in the backtest
+    sp.add_argument("--once", action="store_true", help="check once and exit (for Task Scheduler)")
+    sp.add_argument("--dry-run", action="store_true", help="print instead of sending")
+    sp.add_argument("--sop", action="store_true", help="also require the SOP checklist (far fewer signals)")
+    sp.add_argument("--max-per-day", type=int, default=6, help="max messages per UTC day (default 6)")
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)
     a = ap.parse_args(argv)

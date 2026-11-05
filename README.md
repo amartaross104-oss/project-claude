@@ -78,6 +78,14 @@ The script asks for the bot token (hidden) and Chat ID and stores them as user e
 `TELEGRAM_CHAT_ID`; it runs daily 00:20 UTC. Without the secrets it only does a dry run, so A and B never double-send
 unless you set the secrets in both. Use "Run workflow" with `send_test` to verify the secrets.
 
+## Scalping mode (15m, UNVALIDATED)
+`python -m signalbot scalp BTCUSDT --once --dry-run` (drop `--dry-run` to send; without `--once` it loops every 15 min).
+BTC 15m, ML model, horizon 16 bars (4 h), settings fixed before testing. Walk-forward since May 2024: ~7.5 signals/day,
+expectancy +0.04 R before fees but -0.18 R at 8 bps and -0.50 R at 20 bps round trip (profit factor 0.69 / 0.32).
+Break-even needs fees + spread + slippage below ~2 bps. Every message carries an UNVALIDATED label; `--max-per-day`
+(default 6) caps messages per UTC day; `--sop` adds the SOP checklist (about 0.5 signals/day, still negative).
+Windows: run `scripts\windows\setup_task.ps1` first, then `scripts\windows\setup_scalp_task.ps1` (every 15 minutes).
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)

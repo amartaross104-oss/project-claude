@@ -32,6 +32,8 @@ class Signal:
     checks: dict | None = None     # SOP checklist for the chosen side
     health_line: str = ""
     blocked: str = ""              # why a model signal was NOT sent
+    label: str = ""                # optional one-line warning prepended to the message
+    footer: str = ""               # optional extra line (e.g. daily counter)
 
     def head(self) -> str:
         return (f"{self.symbol} {self.interval} | bar closed {self.bar_time:%Y-%m-%d %H:%M} UTC"
@@ -43,6 +45,12 @@ class Signal:
         return f"P(down)={self.proba[0]:.2f} P(none)={self.proba[1]:.2f} P(up)={self.proba[2]:.2f}"
 
     def message(self) -> str:
+        body = self._body()
+        if self.label:
+            body = self.label + "\n" + body
+        return body + ("\n" + self.footer if self.footer and self.side else "")
+
+    def _body(self) -> str:
         if self.side == 0:
             why = f"  [{self.blocked}]" if self.blocked else ""
             return f"{self.head()}\nNO TRADE{why}  {self.probs()}"
@@ -118,17 +126,33 @@ def record(sig: Signal, state: dict, path: Path) -> None:
     path.write_text(json.dumps(state))
 
 
+def daily_count(state: dict, day: str) -> int:
+    c = state.get("_count") or {}
+    return int(c.get("n", 0)) if c.get("date") == day else 0
+
+
 def check_once(cfgs: list[Config], send, state_path: Path = STATE_FILE, log=print,
-               persist: bool = True, sop=None, health_gate: bool = False) -> None:
+               persist: bool = True, sop=None, health_gate: bool = False,
+               max_per_day: int | None = None, label: str = "") -> None:
     for cfg in cfgs:
         try:
             sig = compute_signal(cfg, sop=sop, health_gate=health_gate)
+            sig.label = label
             state = _load_state(state_path)
             if should_send(sig, state):
+                day = sig.bar_time.strftime("%Y-%m-%d")
+                n = daily_count(state, day)
+                if max_per_day is not None and n >= max_per_day:
+                    log(f"[skip] {sig.head()} | daily cap {max_per_day} reached")
+                    continue
+                if max_per_day is not None:
+                    sig.footer = f"Signal {n + 1}/{max_per_day} today (UTC)"
                 send(sig.message())
+                state["_count"] = {"date": day, "n": n + 1}
                 if persist:
                     record(sig, state, state_path)
-                log(f"[sent] {sig.symbol} {'LONG' if sig.side == 1 else 'SHORT'} @ {sig.close:.5g}")
+                log(f"[{'sent' if persist else 'dry-run'}] {sig.symbol} "
+                    f"{'LONG' if sig.side == 1 else 'SHORT'} @ {sig.close:.5g}")
             else:
                 log(f"[skip] {sig.head()} | {sig.blocked or 'already sent'}")
         except Exception as e:  # keep the watcher alive on network/data errors
@@ -141,13 +165,14 @@ def next_run(now: float, interval: str, delay_s: int = 60) -> float:
 
 
 def watch(cfgs: list[Config], send, delay_s: int | None = None, log=print, persist: bool = True,
-          sop=None, health_gate: bool = False) -> None:
+          sop=None, health_gate: bool = False, max_per_day: int | None = None, label: str = "") -> None:
     interval = cfgs[0].interval
     if delay_s is None:  # Binance candles are final right away; Yahoo forex lags ~1 min
         delay_s = 5 if all(is_crypto(c.symbol) for c in cfgs) else 60
     log(f"watching {', '.join(c.symbol for c in cfgs)} on {interval}; Ctrl+C to stop")
     while True:
-        check_once(cfgs, send, log=log, persist=persist, sop=sop, health_gate=health_gate)
+        check_once(cfgs, send, log=log, persist=persist, sop=sop, health_gate=health_gate,
+                   max_per_day=max_per_day, label=label)
         wake = next_run(time.time(), interval, delay_s)
         log(f"next check at {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(wake))} UTC")
         time.sleep(max(1, wake - time.time()))
