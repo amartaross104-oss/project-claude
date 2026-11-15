@@ -110,6 +110,11 @@ python -m signalbot report                 # summary + last trades (add --mode s
 The ledger logic is tested to agree with the backtest barrier outcomes bar for bar (`tests/test_ledger.py`).
 Trades are resolved one bar after they finish, so an alert can come up to one bar (15 min for scalp) late.
 
+## Updating on Windows (one command)
+`powershell -ExecutionPolicy Bypass -File scripts\windows\update.ps1` downloads the latest code from the public GitHub branch
+and copies it over the folder; `data\` and the scheduled tasks are untouched. It never runs automatically, so code only
+changes when you run it.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)
