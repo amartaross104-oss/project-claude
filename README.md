@@ -115,6 +115,14 @@ Trades are resolved one bar after they finish, so an alert can come up to one ba
 and copies it over the folder; `data\` and the scheduled tasks are untouched. It never runs automatically, so code only
 changes when you run it.
 
+## Simulated $100 account
+`python -m signalbot report` starts with a simulated account built from the ledger: start $100, every entered signal uses 10% of
+the CURRENT balance as margin (profits compound), leverage is chosen so a stop-out loses about 2% of the balance (cap 100x),
+fees (10 bps round trip) are charged on the position notional, an isolated-margin trade can lose at most its margin, funding and
+slippage are ignored. It is recomputed from `data/paper_trades.csv` each time and also written to `data/paper_account.csv`
+(every trade: margin, leverage, P/L in USD, balance). Close alerts show the USD result and the new balance.
+Options: `--start --margin-pct --risk-pct --max-lev --fee-bps`.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)

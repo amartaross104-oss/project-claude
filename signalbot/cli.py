@@ -124,7 +124,10 @@ def cmd_scalp(a):
 def cmd_report(a):
     from .ledger import report_text
 
-    text = report_text(mode=a.mode, last=a.last)
+    from .account import Account
+
+    acct = Account(start=a.start, margin_pct=a.margin_pct, risk_pct=a.risk_pct, max_lev=a.max_lev, fee_bps=a.fee_bps)
+    text = report_text(mode=a.mode, last=a.last, acct=acct)
     print(text)
     if a.notify:
         send_telegram(text)
@@ -212,6 +215,11 @@ def main(argv=None):
     sp.add_argument("--mode", choices=["all", "scalp", "trend", "ml"], default="all")
     sp.add_argument("--last", type=int, default=8, help="how many recent trades to list")
     sp.add_argument("--notify", action="store_true", help="also send the summary to Telegram")
+    sp.add_argument("--start", type=float, default=100.0, help="starting balance in USD")
+    sp.add_argument("--margin-pct", type=float, default=0.10, help="share of the balance used as margin per trade")
+    sp.add_argument("--risk-pct", type=float, default=0.02, help="balance lost if the stop is hit (sets the leverage)")
+    sp.add_argument("--max-lev", type=float, default=100.0)
+    sp.add_argument("--fee-bps", type=float, default=10.0, help="round-trip fee on the notional")
     sp.set_defaults(fn=cmd_report)
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)

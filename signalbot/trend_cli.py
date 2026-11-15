@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -91,10 +92,18 @@ def check_trend(a, state_path=STATE_FILE, send=send_telegram, ledger_path=None, 
         cost = default_cost_bps(sym)
         if tracking:                                   # resolve earlier paper trades, tell the user what finished
             done = []
-            for row in ledger_mod.update(lp, sym, "1d", df, modes=["trend"]):
+            newly = ledger_mod.update(lp, sym, "1d", df, modes=["trend"])
+            by_id = {}
+            if newly:
+                from . import account as account_mod
+
+                rp = account_mod.replay(ledger_mod.load(lp)).trades
+                by_id = {r["id"]: r for _, r in rp.iterrows()}
+                account_mod.save_csv(ledger_mod.load(lp), Path(lp).with_name("paper_account.csv"))
+            for row in newly:
                 print(f"[paper] {sym} {row['status']} {float(row['gross_r']):+.2f} R")
                 try:
-                    send(ledger_mod.close_message(row, fee_bps))
+                    send(ledger_mod.close_message(row, fee_bps, by_id.get(row["id"])))
                     done.append(row["id"])
                 except Exception as e:
                     print(f"[error] close alert not sent: {e}")

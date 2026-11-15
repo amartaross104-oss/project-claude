@@ -11,6 +11,7 @@ from .config import Config
 from .health import assess
 from . import sop as sop_mod
 from . import data as data_mod
+from . import account as account_mod
 from . import ledger as ledger_mod
 from .data import DATA_DIR, INTERVAL_MS, is_crypto
 from .model import fit_final, predict_last, walk_forward
@@ -161,10 +162,15 @@ def _ledger_update(cfg: Config, send, path, fee_bps: float, log) -> None:
     df = data_mod.load(cfg.symbol, cfg.interval)
     newly = ledger_mod.update(path, cfg.symbol, cfg.interval, df, modes=["scalp", "ml"])
     done = []
+    by_id = {}
+    if newly:
+        rp = account_mod.replay(ledger_mod.load(path)).trades
+        by_id = {r["id"]: r for _, r in rp.iterrows()}
+        account_mod.save_csv(ledger_mod.load(path), Path(path).with_name("paper_account.csv"))
     for row in newly:
         log(f"[paper] {row['symbol']} {row['status']} {float(row['gross_r']):+.2f} R")
         try:
-            send(ledger_mod.close_message(row, fee_bps))
+            send(ledger_mod.close_message(row, fee_bps, by_id.get(row["id"])))
             done.append(row["id"])
         except Exception as e:  # keep the record even if Telegram fails
             log(f"[error] close alert not sent: {e}")

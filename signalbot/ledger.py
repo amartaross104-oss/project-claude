@@ -144,7 +144,7 @@ def net_r(row_or_df, cost_bps: float):
     return row_or_df["gross_r"] - (cost_bps / 1e4) / row_or_df["stop_frac"]
 
 
-def close_message(row, cost_bps: float = 8.0) -> str:
+def close_message(row, cost_bps: float = 8.0, acct: dict | None = None) -> str:
     """Short ASCII Telegram message for a trade that just finished."""
     d = "LONG" if int(row["side"]) == 1 else "SHORT"
     head = f"{d} {row['symbol']} {row['interval']} ({row['mode']})"
@@ -152,8 +152,12 @@ def close_message(row, cost_bps: float = 8.0) -> str:
         return f"TERLEPAS: {head}\nHarga buka {float(row['fill']):.5g} di luar julat masuk, tiada trade (paper)."
     label = {"tp": "TP KENA", "sl": "SL KENA", "time": "TAMAT MASA", "exit": "KELUAR (peraturan trend)"}[row["status"]]
     n = float(net_r(row, cost_bps))
-    return (f"{label}: {head}\nEntry {float(row['fill']):.5g} -> Keluar {float(row['exit_price']):.5g} "
+    text = (f"{label}: {head}\nEntry {float(row['fill']):.5g} -> Keluar {float(row['exit_price']):.5g} "
             f"({int(row['bars'])} bar)\nHasil: {float(row['gross_r']):+.2f} R (bersih {n:+.2f} R @ {cost_bps:g} bps)")
+    if acct is not None:
+        text += (f"\nAkaun simulasi: margin ${acct['margin']:.2f} x{acct['leverage']:.0f} -> "
+                 f"{'UNTUNG' if acct['pnl'] > 0 else 'RUGI'} {acct['pnl']:+.2f} USD | Baki ${acct['balance']:.2f}")
+    return text
 
 
 def summarize(led: pd.DataFrame, cost_bps: float) -> dict:
@@ -173,13 +177,16 @@ def summarize(led: pd.DataFrame, cost_bps: float) -> dict:
     return out
 
 
-def report_text(path=LEDGER_FILE, mode: str = "all", costs=(8.0, 20.0), last: int = 8) -> str:
+def report_text(path=LEDGER_FILE, mode: str = "all", costs=(8.0, 20.0), last: int = 8, acct=None) -> str:
     led = load(path)
     if mode != "all":
         led = led[led["mode"] == mode]
     if led.empty:
         return "Belum ada rekod paper trade."
-    lines = [f"PAPER TRADE ({mode}) | jumlah signal {len(led)} | masih terbuka {int((led.status == 'open').sum())} "
+    from .account import Account, account_text
+
+    lines = [account_text(led, acct or Account(), last=last), "",
+             f"PAPER TRADE ({mode}) | jumlah signal {len(led)} | masih terbuka {int((led.status == 'open').sum())} "
              f"| terlepas (di luar julat) {int((led.status == 'missed').sum())}"]
     for cost in costs:
         s = summarize(led, cost)
