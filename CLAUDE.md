@@ -7,11 +7,11 @@ statistically significant edge after costs.** Never claim a signal is "high prob
 - `signalbot/` data (Binance public API for crypto, Yahoo for forex), features, labels (triple barrier), model (LightGBM,
   purged walk-forward), backtest (R-multiples, costs, random-side baseline), `sop.py` (rule checklist), `health.py`
   (strategy health gate incl. t-stat), `trend.py` / `trend_cli.py` (Donchian), `patterns.py` (candles, double top/bottom),
-  `derivs.py` (funding), `signals.py` (message building, dedupe, watch loop), `notify.py` (Telegram), `cli.py`.
+  `derivs.py` (funding), `ledger.py` (automatic paper-trade ledger + `report`), `signals.py` (message building, dedupe, watch loop), `notify.py` (Telegram), `cli.py`.
 - `scripts/windows/` Task Scheduler setup (`setup_task.ps1`, `setup_scalp_task.ps1`, `run_hidden.vbs`, `hide_windows.ps1`).
 - `.github/workflows/trend-signal.yml` daily paper trend check (sends only if repo secrets are set).
 - `docs/trading-knowledge.md` general knowledge + all measured results. READ IT before proposing new strategies.
-- Tests: `python -m pytest -q` (must stay green). Use pytest + synthetic data; add a causality test for every new feature/rule.
+- Tests never write to the real `data/` folder (always pass tmp paths). Tests: `python -m pytest -q` (must stay green). Use pytest + synthetic data; add a causality test for every new feature/rule.
 
 ## Commands
 `python -m signalbot fetch|backtest|health|signal|watch|scalp|trend|demo|telegram-test|chatid ...` (see `--help`).

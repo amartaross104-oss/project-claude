@@ -94,11 +94,12 @@ def test_trend_notify_dedupes_same_bar(tmp_path, monkeypatch):
     a = SimpleNamespace(symbols=["BTCUSDT"], system="1", paper=True, notify=True, dry_run=False, loop=False)
     monkeypatch.setattr(trend_cli, "fresh_signal", lambda *x, **k: 1)
     state = tmp_path / "s.json"
-    assert trend_cli.check_trend(a, state, sent.append) is True
-    assert trend_cli.check_trend(a, state, sent.append) is False   # same bar -> no duplicate
+    lp = tmp_path / "ledger.csv"                                     # never touch the real data/ folder
+    assert trend_cli.check_trend(a, state, sent.append, ledger_path=lp) is True
+    assert trend_cli.check_trend(a, state, sent.append, ledger_path=lp) is False   # same bar -> no duplicate
     assert len(sent) == 1 and sent[0].startswith("PAPER / UNVALIDATED")
     a.dry_run = True
-    assert trend_cli.check_trend(a, state, sent.append) is False and len(sent) == 1
+    assert trend_cli.check_trend(a, state, sent.append, ledger_path=lp) is False and len(sent) == 1
 
 
 def test_empty_history_does_not_crash():

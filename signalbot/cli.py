@@ -114,11 +114,21 @@ def cmd_scalp(a):
     sop = sop_document_preset() if a.sop_doc else (SOP() if a.sop else None)
     send = (lambda m: print("[dry-run]\n" + m)) if a.dry_run else send_telegram
     kw = dict(sop=sop, health_gate=False, max_per_day=a.max_per_day, label=SCALP_LABEL,
-              style="full" if a.full_message else "simple")
+              style="full" if a.full_message else "simple", track=True, mode="scalp", fee_bps=a.fee_bps)
     if a.once:
         check_once(cfgs, send, persist=not a.dry_run, **kw)
     else:
         watch(cfgs, send, persist=not a.dry_run, **kw)
+
+
+def cmd_report(a):
+    from .ledger import report_text
+
+    text = report_text(mode=a.mode, last=a.last)
+    print(text)
+    if a.notify:
+        send_telegram(text)
+        print("sent to Telegram")
 
 
 def cmd_telegram_test(a):
@@ -197,6 +207,12 @@ def main(argv=None):
                     help="require the SOP-document rules instead (higher-TF direction, no squeeze, trade hours)")
     sp.add_argument("--max-per-day", type=int, default=6, help="max messages per UTC day (default 6)")
     sp.add_argument("--full-message", action="store_true", help="old detailed message instead of the short one")
+    sp.add_argument("--fee-bps", type=float, default=8.0, help="round-trip fee used in the 'trade finished' message")
+    sp = sub.add_parser("report", help="summary of the automatic paper-trade ledger")
+    sp.add_argument("--mode", choices=["all", "scalp", "trend", "ml"], default="all")
+    sp.add_argument("--last", type=int, default=8, help="how many recent trades to list")
+    sp.add_argument("--notify", action="store_true", help="also send the summary to Telegram")
+    sp.set_defaults(fn=cmd_report)
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)
     sub.add_parser("chatid", help="find your TELEGRAM_CHAT_ID").set_defaults(fn=cmd_chatid)
     a = ap.parse_args(argv)

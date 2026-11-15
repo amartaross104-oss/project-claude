@@ -10,6 +10,8 @@ from .backtest import pick_side
 from .config import Config
 from .health import assess
 from . import sop as sop_mod
+from . import data as data_mod
+from . import ledger as ledger_mod
 from .data import DATA_DIR, INTERVAL_MS, is_crypto
 from .model import fit_final, predict_last, walk_forward
 from .pipeline import build
@@ -154,13 +156,33 @@ def daily_count(state: dict, day: str) -> int:
     return int(c.get("n", 0)) if c.get("date") == day else 0
 
 
+def _ledger_update(cfg: Config, send, path, fee_bps: float, log) -> None:
+    """Resolve open paper trades with fresh data and tell the user about any that just finished."""
+    df = data_mod.load(cfg.symbol, cfg.interval)
+    newly = ledger_mod.update(path, cfg.symbol, cfg.interval, df, modes=["scalp", "ml"])
+    done = []
+    for row in newly:
+        log(f"[paper] {row['symbol']} {row['status']} {float(row['gross_r']):+.2f} R")
+        try:
+            send(ledger_mod.close_message(row, fee_bps))
+            done.append(row["id"])
+        except Exception as e:  # keep the record even if Telegram fails
+            log(f"[error] close alert not sent: {e}")
+    if done:
+        ledger_mod.mark_notified(path, done)
+
+
 def check_once(cfgs: list[Config], send, state_path: Path = STATE_FILE, log=print,
                persist: bool = True, sop=None, health_gate: bool = False,
-               max_per_day: int | None = None, label: str = "", style: str = "full") -> None:
+               max_per_day: int | None = None, label: str = "", style: str = "full",
+               track: bool = False, mode: str = "ml", ledger_path=None, fee_bps: float = 8.0) -> None:
+    lp = ledger_path or ledger_mod.LEDGER_FILE
     for cfg in cfgs:
         try:
             sig = compute_signal(cfg, sop=sop, health_gate=health_gate)
             sig.label, sig.style = label, style
+            if track and persist:
+                _ledger_update(cfg, send, lp, fee_bps, log)
             state = _load_state(state_path)
             ok = should_send(sig, state)
             preview_dup = (not persist) and (not ok) and sig.side != 0
@@ -178,6 +200,10 @@ def check_once(cfgs: list[Config], send, state_path: Path = STATE_FILE, log=prin
                 state["_count"] = {"date": day, "n": n + 1}
                 if persist:
                     record(sig, state, state_path)
+                    if track:
+                        zone = sig.zone_atr * sig.atr
+                        ledger_mod.add_signal(lp, mode, sig.symbol, sig.interval, sig.bar_time, sig.side, sig.close,
+                                              sig.tp, sig.sl, sig.horizon, sig.close - zone, sig.close + zone)
                 log(f"[{'sent' if persist else 'dry-run'}] {sig.symbol} "
                     f"{'LONG' if sig.side == 1 else 'SHORT'} @ {sig.close:.5g}")
             else:
@@ -193,14 +219,14 @@ def next_run(now: float, interval: str, delay_s: int = 60) -> float:
 
 def watch(cfgs: list[Config], send, delay_s: int | None = None, log=print, persist: bool = True,
           sop=None, health_gate: bool = False, max_per_day: int | None = None, label: str = "",
-          style: str = "full") -> None:
+          style: str = "full", track: bool = False, mode: str = "ml", fee_bps: float = 8.0) -> None:
     interval = cfgs[0].interval
     if delay_s is None:  # Binance candles are final right away; Yahoo forex lags ~1 min
         delay_s = 5 if all(is_crypto(c.symbol) for c in cfgs) else 60
     log(f"watching {', '.join(c.symbol for c in cfgs)} on {interval}; Ctrl+C to stop")
     while True:
         check_once(cfgs, send, log=log, persist=persist, sop=sop, health_gate=health_gate,
-                   max_per_day=max_per_day, label=label, style=style)
+                   max_per_day=max_per_day, label=label, style=style, track=track, mode=mode, fee_bps=fee_bps)
         wake = next_run(time.time(), interval, delay_s)
         log(f"next check at {time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(wake))} UTC")
         time.sleep(max(1, wake - time.time()))

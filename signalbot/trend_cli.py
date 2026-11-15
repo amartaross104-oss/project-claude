@@ -11,6 +11,7 @@ from .config import default_cost_bps
 from .features import atr
 from .health import t_stat
 from .notify import send_telegram
+from . import ledger as ledger_mod
 from .signals import STATE_FILE, _load_state, next_run
 from .trend import SYSTEM_1, SYSTEM_2, TrendParams, fresh_signal, run_trend
 
@@ -80,12 +81,25 @@ def remember(state: dict, path, sym: str, system: str, bar_iso: str, side: int) 
     path.write_text(json.dumps(state))
 
 
-def check_trend(a, state_path=STATE_FILE, send=send_telegram):
+def check_trend(a, state_path=STATE_FILE, send=send_telegram, ledger_path=None, fee_bps: float = 20.0):
     p = SYSTEMS[a.system]
     sent_any = False
+    lp = ledger_path or ledger_mod.LEDGER_FILE
+    tracking = a.notify and not a.dry_run
     for sym in (s.upper() for s in a.symbols):
         df = data.load(sym, "1d", refresh=True)
         cost = default_cost_bps(sym)
+        if tracking:                                   # resolve earlier paper trades, tell the user what finished
+            done = []
+            for row in ledger_mod.update(lp, sym, "1d", df, modes=["trend"]):
+                print(f"[paper] {sym} {row['status']} {float(row['gross_r']):+.2f} R")
+                try:
+                    send(ledger_mod.close_message(row, fee_bps))
+                    done.append(row["id"])
+                except Exception as e:
+                    print(f"[error] close alert not sent: {e}")
+            if done:
+                ledger_mod.mark_notified(lp, done)
         trades = run_trend(df, p, cost)
         side = fresh_signal(df, p, cost)
         print(f"\n{sym} 1d  bar {df.index[-1]:%Y-%m-%d}  close {df['close'].iloc[-1]:.5g}  "
@@ -111,6 +125,10 @@ def check_trend(a, state_path=STATE_FILE, send=send_telegram):
                 continue
             send(msg)
             remember(state, state_path, sym, a.system, bar, side)
+            close_px = float(df["close"].iloc[-1])
+            stop_px = close_px - side * p.stop_mult * float(atr(df, p.atr_n).iloc[-1])
+            ledger_mod.add_signal(lp, "trend", sym, "1d", df.index[-1], side, close_px, float("nan"), stop_px, 0,
+                                  float("-inf"), float("inf"), params=f"{p.entry_n}/{p.exit_n}")
             sent_any = True
             print("sent to Telegram")
     return sent_any

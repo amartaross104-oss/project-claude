@@ -98,6 +98,18 @@ tasks up with an older version, run `powershell -ExecutionPolicy Bypass -File sc
 on BTC, ETH, EURUSD, GBPUSD at 1h/4h/1d, net of costs: 0 of 146 tests are significantly positive (3.7 would be by chance),
 57 are significantly negative, mean -0.11 R. Patterns are not wired into the bot. See `docs/trading-knowledge.md`.
 
+## Automatic paper-trade ledger
+Every scalp / trend signal that is sent is recorded in `data/paper_trades.csv` and tracked until it finishes; no real
+money needed. Entry = open of the next bar, only if inside the entry zone (else "terlepas"/missed); TP/SL are checked on
+each bar's high/low, both in one bar counts as SL, a gap through the SL fills at the open, scalp trades expire after 16 bars,
+trend trades follow the Donchian exit. Results are stored gross in R and fees are applied in the report (8 and 20 bps).
+A short Telegram message is sent when a trade finishes ("TP KENA" / "SL KENA" / "TAMAT MASA" / "TERLEPAS").
+```bash
+python -m signalbot report                 # summary + last trades (add --mode scalp|trend, --notify)
+```
+The ledger logic is tested to agree with the backtest barrier outcomes bar for bar (`tests/test_ledger.py`).
+Trades are resolved one bar after they finish, so an alert can come up to one bar (15 min for scalp) late.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)
