@@ -110,3 +110,26 @@ def save_csv(led: pd.DataFrame, path, acct: Account = Account()) -> None:
     rp = replay(led, acct)
     path.parent.mkdir(parents=True, exist_ok=True)
     rp.trades.to_csv(path, index=False)
+
+
+def daily_text(led: pd.DataFrame, acct: Account = Account(), now: pd.Timestamp | None = None) -> str:
+    """Compact ASCII summary for Telegram: balance, last 24 hours, totals. Doubles as a 'bot is alive' message."""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    head = f"RINGKASAN HARIAN (paper) {now:%d %b %H:%M} UTC"
+    if led.empty:
+        return head + "\nBot hidup. Belum ada signal direkod."
+    rp = replay(led, acct)
+    s, tr = rp.summary, rp.trades
+    lines = [head, f"Akaun ${s['start']:.0f} -> ${s['balance']:.2f} ({s['ret']:+.1%}) | drawdown {s['drawdown']:.0%}"]
+    if len(tr):
+        exits = pd.to_datetime(tr["exit_time"], utc=True)
+        recent = tr[(exits > now - pd.Timedelta(hours=24)) & (exits <= now)]
+        w = int((recent["pnl"] > 0).sum())
+        lines.append(f"24 jam lepas: {len(recent)} trade tamat ({w} menang, {len(recent) - w} kalah) -> "
+                     f"{recent['pnl'].sum():+.2f} USD")
+        lines.append(f"Jumlah: {s['n']} trade, menang {s['wins'] / s['n']:.0%} | terbaik {s['best']:+.2f}, "
+                     f"terburuk {s['worst']:+.2f} USD")
+    else:
+        lines.append("Belum ada trade yang tamat.")
+    lines.append(f"Terbuka: {s['open']} (margin ${s['locked']:.2f}) | terlepas: {int((led['status'] == 'missed').sum())}")
+    return "\n".join(lines)

@@ -4,3 +4,4 @@ cd /d "%~dp0..\.."
 if not exist data mkdir data
 echo ===== %date% %time% >> data\task.log
 python -m signalbot trend BTCUSDT ETHUSDT --system 2 --paper --notify >> data\task.log 2>&1
+python -m signalbot report --daily --notify >> data\task.log 2>&1

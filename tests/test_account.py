@@ -86,3 +86,19 @@ def test_close_message_includes_usd_result_and_report_has_account_block(tmp_path
     p = tmp_path / "p.csv"
     ledger.save(led, p)
     assert "AKAUN SIMULASI" in ledger.report_text(p)
+
+
+def test_daily_text_window_totals_and_empty_case():
+    from signalbot.account import daily_text
+    now = IDX[40]
+    led = led_from([dict(i=0, exit_i=2, status="tp", gross_r=1.0),          # long before the 24h window? same day -> inside
+                    dict(i=6, exit_i=8, status="sl", gross_r=-1.0)])
+    txt = daily_text(led, Account(), now=now)
+    txt.encode("ascii")
+    assert txt.startswith("RINGKASAN HARIAN (paper)")
+    assert "24 jam lepas: 2 trade tamat (1 menang, 1 kalah)" in txt and "Akaun $100 -> $98.96" in txt
+    assert "Terbuka: 0" in txt
+    old = daily_text(led, Account(), now=IDX[40] + pd.Timedelta(days=3))
+    assert "24 jam lepas: 0 trade tamat" in old                              # nothing finished in the last 24 hours
+    empty = daily_text(ledger.load("/nonexistent/none.csv"), Account(), now=now)
+    assert "Bot hidup" in empty
