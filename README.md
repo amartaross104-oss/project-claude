@@ -93,6 +93,11 @@ chase outside it), TP, SL (both 1.5 ATR from entry), expiry (16 bars = 4 h), the
 The scheduled tasks start through `wscript.exe` + `scripts\windows\run_hidden.vbs`, so no CMD window appears. If you set the
 tasks up with an older version, run `powershell -ExecutionPolicy Bypass -File scripts\windows\hide_windows.ps1` once.
 
+## Pattern study
+`python scripts/pattern_study.py` tests 16 textbook patterns (14 candlestick patterns plus double top/bottom, `signalbot/patterns.py`)
+on BTC, ETH, EURUSD, GBPUSD at 1h/4h/1d, net of costs: 0 of 146 tests are significantly positive (3.7 would be by chance),
+57 are significantly negative, mean -0.11 R. Patterns are not wired into the bot. See `docs/trading-knowledge.md`.
+
 ## Speed
 Data refresh is incremental (only bars after the cached ones are downloaded; `fetch` does a full download).
 `demo` takes ~1-2 s, `watch` waits 5 s after a bar closes for crypto (Binance candles are final immediately)
