@@ -14,7 +14,7 @@ from .features import atr
 from .health import assess
 from .model import walk_forward as _wf  # noqa: F401
 from .signals import Signal, check_once, compute_signal, watch
-from .sop import SOP, evaluate as sop_evaluate, gate as sop_gate
+from .sop import SOP, evaluate as sop_evaluate, gate as sop_gate, sop_document_preset
 from .pipeline import build
 
 
@@ -111,7 +111,7 @@ SCALP_LABEL = "UNVALIDATED: backtest negatif selepas yuran. Paper / saiz kecil s
 
 def cmd_scalp(a):
     cfgs = [_cfg(a, sym) for sym in a.symbols]
-    sop = SOP() if a.sop else None
+    sop = sop_document_preset() if a.sop_doc else (SOP() if a.sop else None)
     send = (lambda m: print("[dry-run]\n" + m)) if a.dry_run else send_telegram
     kw = dict(sop=sop, health_gate=False, max_per_day=a.max_per_day, label=SCALP_LABEL,
               style="full" if a.full_message else "simple")
@@ -193,6 +193,8 @@ def main(argv=None):
     sp.add_argument("--once", action="store_true", help="check once and exit (for Task Scheduler)")
     sp.add_argument("--dry-run", action="store_true", help="print instead of sending")
     sp.add_argument("--sop", action="store_true", help="also require the SOP checklist (far fewer signals)")
+    sp.add_argument("--sop-doc", action="store_true",
+                    help="require the SOP-document rules instead (higher-TF direction, no squeeze, trade hours)")
     sp.add_argument("--max-per-day", type=int, default=6, help="max messages per UTC day (default 6)")
     sp.add_argument("--full-message", action="store_true", help="old detailed message instead of the short one")
     sub.add_parser("telegram-test", help="send a test message").set_defaults(fn=cmd_telegram_test)

@@ -6,6 +6,13 @@ Rules (all use only data up to the signal bar):
   volatility ATR% must sit between the 20th and 90th percentile of the last 500 bars
   cost       round-trip cost must be <= max_cost_r of the stop distance (R)
   session    forex only: entry bar must open 08:00-17:00 UTC (London / New York liquidity)
+
+Extra rules taken from a third-party SOP document (generic ideas only; the proprietary "box" indicator
+is NOT reproduced; mtf is a plain EMA proxy for "higher timeframe direction"):
+  mtf        long only if the last COMPLETED higher-timeframe bar closed above its EMA20 (short: below)
+             (entry 5m->1h, 15m->4h, 1h->1d, 4h->1d)
+  squeeze    no entry while Bollinger(20, 2) bandwidth is in the lowest 25% of the last 200 bars (sideways)
+  hours      entry bar must open inside 15:00-17:00 or 21:00-23:00 Malaysia time (07-09 and 13-15 UTC)
 """
 from __future__ import annotations
 
@@ -34,6 +41,43 @@ class SOP:
     vol_window: int = 500
     session_start: int = 8
     session_end: int = 17
+    # SOP-document rules (off by default so earlier behaviour is unchanged)
+    mtf: bool = False
+    squeeze: bool = False
+    hours: bool = False
+    htf_ema: int = 20
+    bb_n: int = 20
+    bb_k: float = 2.0
+    squeeze_q: float = 0.25
+    squeeze_window: int = 200
+    hours_utc: tuple = ((7, 9), (13, 15))
+
+
+HTF_FOR = {"5m": "1h", "15m": "4h", "1h": "1d", "4h": "1d"}
+HTF_MS = {"1h": 3_600_000, "4h": 14_400_000, "1d": 86_400_000}
+
+
+def sop_document_preset(**over) -> "SOP":
+    """Only the rules from the SOP document, plus the cost check (all the other built-in rules off)."""
+    base = dict(trend=False, rsi=False, volatility=False, cost=True, session=False,
+                mtf=True, squeeze=True, hours=True)
+    base.update(over)
+    return SOP(**base)
+
+
+def htf_direction(df: pd.DataFrame, interval: str, ema_span: int) -> np.ndarray | None:
+    """+1 / -1 per base bar: direction of the last COMPLETED higher-timeframe bar (0 = unknown)."""
+    htf = HTF_FOR.get(interval)
+    if htf is None or INTERVAL_MS[interval] >= HTF_MS[htf]:
+        return None
+    c = df["close"].resample(htf).last().dropna()
+    ema = c.ewm(span=ema_span, adjust=False).mean()
+    sign = pd.Series(np.where(c > ema, 1, -1), index=c.index + pd.Timedelta(milliseconds=HTF_MS[htf]))
+    sign.iloc[: ema_span] = 0                                # EMA warm-up
+    closes = df.index + pd.Timedelta(milliseconds=INTERVAL_MS[interval])
+    both = sign.index.union(closes)
+    out = sign.reindex(both).ffill().reindex(closes).fillna(0)  # value available once the HTF bar has closed
+    return out.to_numpy(int)
 
 
 def evaluate(df: pd.DataFrame, atr_s: pd.Series, cfg: Config, sop: SOP) -> dict:
@@ -64,6 +108,22 @@ def evaluate(df: pd.DataFrame, atr_s: pd.Series, cfg: Config, sop: SOP) -> dict:
         entry_hour = (df.index + pd.Timedelta(milliseconds=INTERVAL_MS[cfg.interval])).hour
         ok = np.asarray((entry_hour >= sop.session_start) & (entry_hour < sop.session_end))
         rules["session"] = (ok, ok)
+    if sop.mtf:
+        d = htf_direction(df, cfg.interval, sop.htf_ema)
+        if d is not None:
+            rules["mtf"] = (d == 1, d == -1)
+    if sop.squeeze:
+        mid = c.rolling(sop.bb_n).mean()
+        bw = (2 * sop.bb_k * c.rolling(sop.bb_n).std()) / mid
+        thr = bw.rolling(sop.squeeze_window).quantile(sop.squeeze_q)
+        ok = (bw > thr).to_numpy()                            # NaN warm-up compares False -> blocked
+        rules["squeeze"] = (ok, ok)
+    if sop.hours:
+        entry_hour = (df.index + pd.Timedelta(milliseconds=INTERVAL_MS[cfg.interval])).hour
+        ok = np.zeros(n, dtype=bool)
+        for lo, hi in sop.hours_utc:
+            ok |= np.asarray((entry_hour >= lo) & (entry_hour < hi))
+        rules["hours"] = (ok, ok)
     return rules or {"none": (yes, yes)}
 
 

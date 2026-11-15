@@ -158,3 +158,44 @@ def test_t_stat_and_significance_gate():
 def test_t_stat_zero_variance():
     from signalbot.health import t_stat
     assert t_stat([1.0, 1.0, 1.0]) == float("inf") and t_stat([-1.0, -1.0]) == float("-inf")
+
+
+def test_sop_document_rules_causal_and_htf_uses_completed_bars():
+    from signalbot.sop import htf_direction, sop_document_preset
+    cfg = Config(symbol="BTCUSDT", interval="15m", cost_bps=8.0)
+    n = 1800
+    rng = np.random.default_rng(3)
+    close = 100 * np.exp(np.cumsum(rng.normal(0, 0.002, n)))
+    df = pd.DataFrame({"open": np.r_[close[0], close[:-1]], "high": close * 1.001, "low": close * 0.999,
+                       "close": close, "volume": 1.0},
+                      index=pd.date_range("2024-01-01", periods=n, freq="15min", tz="UTC"))
+    a = atr(df)
+    sop = sop_document_preset()
+    full = evaluate(df, a, cfg, sop)
+    assert {"mtf", "squeeze", "hours", "cost"} <= set(full)
+    for k in (900, 1500):                                   # features at bar k must not change when the future is cut
+        part = evaluate(df.iloc[: k + 1], a.iloc[: k + 1], cfg, sop)
+        for name in full:
+            for side in (0, 1):
+                assert full[name][side][k] == part[name][side][k], (name, k)
+    d = htf_direction(df, "15m", 20)
+    # a 15m bar closing at 04:00 may use the 4h bar [00:00, 04:00) (complete); the bar closing 03:45 may not
+    i_0400 = list(df.index).index(pd.Timestamp("2024-01-10 03:45", tz="UTC"))   # closes at 04:00
+    i_0345 = i_0400 - 1
+    h4 = df["close"].resample("4h").last()
+    ema = h4.ewm(span=20, adjust=False).mean()
+    done = h4.index.get_loc(pd.Timestamp("2024-01-10 00:00", tz="UTC"))
+    assert d[i_0400] == (1 if h4.iloc[done] > ema.iloc[done] else -1)
+    prev = h4.index.get_loc(pd.Timestamp("2024-01-09 20:00", tz="UTC"))
+    assert d[i_0345] == (1 if h4.iloc[prev] > ema.iloc[prev] else -1)
+    long_ok, short_ok = full["hours"]
+    hrs = (df.index + pd.Timedelta(minutes=15)).hour
+    assert np.array_equal(long_ok, np.isin(hrs, [7, 8, 13, 14]))
+
+
+def test_sop_document_off_by_default_and_htf_skipped_without_bigger_tf():
+    from signalbot.sop import SOP, htf_direction
+    cfg = Config(symbol="BTCUSDT", interval="1d", cost_bps=20.0)
+    df = synth(300)
+    assert "mtf" not in evaluate(df, atr(df), cfg, SOP())
+    assert htf_direction(df, "1d", 20) is None
